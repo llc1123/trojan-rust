@@ -1,13 +1,34 @@
 use log::trace;
+use log::LevelFilter;
 use serde_derive::Deserialize;
+use serde_with::{serde_as, DisplayFromStr};
 
 #[derive(Deserialize, Debug)]
+pub enum Mode {
+    Server,
+}
+
+impl Default for Mode {
+    fn default() -> Self {
+        Mode::Server
+    }
+}
+
+#[serde_as]
+#[derive(Deserialize, Debug)]
 pub struct Config {
-    pub mode: Option<String>,
-    pub log_level: Option<String>,
+    #[serde(default)]
+    pub mode: Mode,
+    #[serde(default = "default_level")]
+    #[serde_as(as = "DisplayFromStr")]
+    pub log_level: LevelFilter,
     pub trojan: Trojan,
     pub tls: Tls,
     pub redis: Option<Redis>,
+}
+
+fn default_level() -> LevelFilter {
+    LevelFilter::Info
 }
 
 #[derive(Deserialize, Debug)]

@@ -1,6 +1,6 @@
 use clap::{AppSettings, Clap};
 use service::Config;
-use std::{fs::File, io::Read, str::FromStr};
+use std::{fs::File, io::Read};
 mod service;
 use anyhow::Result;
 use chrono;
@@ -38,13 +38,7 @@ async fn main() -> Result<()> {
     file.read_to_string(&mut config_string)?;
     let config: Config = toml::from_str(&config_string)?;
 
-    let log_level = config
-        .log_level
-        .map(|i| log::LevelFilter::from_str(i.as_str()))
-        .transpose()?
-        .unwrap_or(log::LevelFilter::Debug);
-
-    setup_logger(&log_level).unwrap();
+    setup_logger(&config.log_level).unwrap();
 
     if let Err(e) = service::start(config) {
         error!("Unable to start service: {}", e)
