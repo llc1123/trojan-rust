@@ -1,6 +1,5 @@
 use clap::{AppSettings, Clap};
 use service::Config;
-use std::{fs::File, io::Read};
 mod service;
 use anyhow::Result;
 use chrono;
@@ -33,9 +32,7 @@ struct Opts {
 #[tokio::main]
 async fn main() -> Result<()> {
     let opts = Opts::parse();
-    let mut file = File::open(opts.config)?;
-    let mut config_string = String::new();
-    file.read_to_string(&mut config_string)?;
+    let config_string = std::fs::read_to_string(opts.config)?;
     let config: Config = toml::from_str(&config_string)?;
 
     setup_logger(&config.log_level).unwrap();
