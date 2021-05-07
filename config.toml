@@ -1,0 +1,15 @@
+mode = "server" #default: "server"
+log_level = "debug" #default: "info"
+
+[trojan]
+listen = "0.0.0.0:443" #default: "0.0.0.0:443"
+password = "password" #default: None
+fallback = "127.0.0.1:80" 
+
+[tls]
+sni = "example.com"
+cert = "cert.pem"
+key = "key.pem"
+
+[redis]  #default: None
+server = "localhost:5678"

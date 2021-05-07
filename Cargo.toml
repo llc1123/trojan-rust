@@ -6,3 +6,12 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+anyhow = "1.0.40"
+chrono = "0.4.19"
+clap = "3.0.0-beta.2"
+fern = "0.6.0"
+log = "0.4.14"
+serde = "1.0.125"
+serde_derive = "1.0.125"
+tokio = { version = "1.5.0", features = ["full"] }
+toml = "0.5.8"
