@@ -1,44 +1,34 @@
-use clap::{AppSettings, Clap};
-use service::Config;
 mod service;
-use anyhow::Result;
-use chrono;
-use log::error;
+mod utils;
 
-fn setup_logger(&log_level: &log::LevelFilter) -> Result<(), fern::InitError> {
-    fern::Dispatch::new()
-        .format(|out, message, record| {
-            out.finish(format_args!(
-                "{}[{}] {}",
-                chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
-                record.level(),
-                message
-            ))
-        })
-        .level(log_level)
-        .chain(std::io::stdout())
-        .apply()?;
-    Ok(())
-}
+use anyhow::{Context, Result};
+use clap::{AppSettings, Clap};
+use log::error;
+use utils::{config, logger};
 
 #[derive(Clap)]
-#[clap(version = "1.0", author = "llc1123 <i@llc.moe>")]
+#[clap(version, author, about)]
 #[clap(setting = AppSettings::ColoredHelp)]
 struct Opts {
     #[clap(short, long, default_value = "config.toml")]
     config: String,
+    #[clap(long, default_value = "info", env = "LOGLEVEL")]
+    log_level: String,
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn start(config: &str) -> Result<()> {
+    let config = config::load_config_from_path(config).context("Failed to parse config")?;
+    service::start(config).context("Failed to start service")?;
+    Ok(())
+}
+
+fn main() -> Result<()> {
     let opts = Opts::parse();
-    let config_string = std::fs::read_to_string(opts.config)?;
-    let config: Config = toml::from_str(&config_string)?;
+    logger::setup_logger(opts.log_level.as_str())?;
 
-    setup_logger(&config.log_level).unwrap();
-
-    if let Err(e) = service::start(config) {
-        error!("Unable to start service: {}", e)
+    if let Err(e) = start(opts.config.as_str()) {
+        error!("{:?}", e);
     }
+
     Ok(())
 }

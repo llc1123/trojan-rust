@@ -1,9 +1,8 @@
-mode = "server" #default: "server"
-log_level = "debug" #default: "info"
+# mode = "server" #default: "server"
 
 [trojan]
-listen = "0.0.0.0:443" #default: "0.0.0.0:443"
-password = "password" #default: None
+# listen = "127.0.0.1:443" #default: "0.0.0.0:443"
+# password = ["password"] #default: None
 fallback = "127.0.0.1:80" 
 
 [tls]
@@ -11,5 +10,5 @@ sni = "example.com"
 cert = "cert.pem"
 key = "key.pem"
 
-[redis]  #default: None
-server = "localhost:5678"
+# [redis]  #default: None
+# server = "localhost:5678"   #default: "localhost:5678"
