@@ -6,7 +6,7 @@
 - Trojan request but password incorrect: Redirect to fallback.
 - Trojan request and password correct: Work as a proxy tunnel.
 
-## How fallback server (usually) works
+## How the fallback server (usually) works
 
 - Not HTTP Request: 400 Bad Request
 - HTTP Request: 404 Not Found

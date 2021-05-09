@@ -2,6 +2,7 @@ use crate::inbound::tls;
 use crate::utils::config::Config;
 use anyhow::Result;
 use log::{debug, info};
+use std::sync::Arc;
 use tokio::io::{copy, sink, AsyncWriteExt};
 use tokio_rustls::rustls::Session;
 
@@ -9,7 +10,9 @@ pub async fn start(config: Config) -> Result<()> {
     debug!("Loading Config: {:?}", &config);
     let inbound = tls::TlsInbound::new(&config.tls).await?;
     info!("Service started.");
+    let tls_config = Arc::new(config.tls);
     loop {
+        let tls_config = tls_config.clone();
         let (stream, peer_addr) = inbound.tcp_listener.accept().await?;
         let acceptor = inbound.tls_acceptor.clone();
         let fut = async move {
@@ -24,7 +27,7 @@ pub async fn start(config: Config) -> Result<()> {
             debug!("SNI: {:?}", session.get_sni_hostname().unwrap_or_default());
             // TODO: redirect to fallback on SNI mismatch
             match session.get_sni_hostname() {
-                Some("localhost") => (),
+                Some(x) if x == tls_config.sni => (),
                 _ => (),
             }
             stream
