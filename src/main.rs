@@ -1,4 +1,5 @@
-mod service;
+mod server;
+mod inbound;
 mod utils;
 
 use anyhow::{Context, Result};
@@ -16,17 +17,20 @@ struct Opts {
     log_level: String,
 }
 
-fn start(config: &str) -> Result<()> {
-    let config = config::load_config_from_path(config).context("Failed to parse config")?;
-    service::start(config).context("Failed to start service")?;
+async fn start(config: &str) -> Result<()> {
+    let config = config::load(config).context("Failed to parse config")?;
+    server::start(config)
+        .await
+        .context("Failed to start service")?;
     Ok(())
 }
 
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     let opts = Opts::parse();
     logger::setup_logger(opts.log_level.as_str())?;
 
-    if let Err(e) = start(opts.config.as_str()) {
+    if let Err(e) = start(opts.config.as_str()).await {
         error!("{:?}", e);
     }
 

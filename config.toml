@@ -1,14 +1,14 @@
 # mode = "server" #default: "server"
 
 [trojan]
-# listen = "127.0.0.1:443" #default: "0.0.0.0:443"
-# password = ["password"] #default: None
+# password = ["password"] #default: []
 fallback = "127.0.0.1:80" 
 
 [tls]
+listen = "127.0.0.1:8888" #default: "0.0.0.0:443"
 sni = "example.com"
-cert = "cert.pem"
-key = "key.pem"
+cert = "fullchain.pem"
+key = "privkey.pem"
 
 # [redis]  #default: None
 # server = "localhost:5678"   #default: "localhost:5678"

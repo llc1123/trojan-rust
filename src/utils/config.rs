@@ -22,21 +22,21 @@ pub struct Config {
     pub redis: Option<Redis>,
 }
 
-fn default_listen() -> String {
-    String::from("0.0.0.0:443")
-}
-
 #[derive(Deserialize, Debug)]
 pub struct Trojan {
-    #[serde(default = "default_listen")]
-    pub listen: String,
     #[serde(default)]
     pub password: Vec<String>,
     pub fallback: String,
 }
 
+fn default_listen() -> String {
+    String::from("0.0.0.0:443")
+}
+
 #[derive(Deserialize, Debug)]
 pub struct Tls {
+    #[serde(default = "default_listen")]
+    pub listen: String,
     pub sni: String,
     pub cert: String,
     pub key: String,
@@ -52,7 +52,7 @@ pub struct Redis {
     pub server: String,
 }
 
-pub fn load_config_from_path(s: &str) -> Result<Config> {
+pub fn load(s: &str) -> Result<Config> {
     let config_string = std::fs::read_to_string(s)?;
     let config = toml::from_str(&config_string)?;
 

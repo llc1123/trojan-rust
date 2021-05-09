@@ -26,6 +26,7 @@ pub fn setup_logger(log_level: &str) -> Result<()> {
         .level(loglevel)
         .chain(std::io::stdout())
         .apply()?;
+
     info!("log_level={}", loglevel);
     Ok(())
 }
