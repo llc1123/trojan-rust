@@ -80,7 +80,7 @@ where
     S: AsyncRead + Unpin,
 {
     // Fill self.buf to size using self.tcp.read_exact
-    async fn fill_buf(&mut self, size: usize) -> crate::Result<()> {
+    async fn fill_buf(&mut self, size: usize) -> io::Result<()> {
         if size > self.buf.len() {
             let to_read = size - self.buf.len();
             let mut buf = vec![0u8; to_read];
@@ -89,11 +89,16 @@ where
         }
         Ok(())
     }
-    pub async fn peek_exact(&mut self, buf: &mut [u8]) -> crate::Result<()> {
+    pub async fn peek_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
         self.fill_buf(buf.len()).await?;
         let self_buf = self.buf.make_contiguous();
         buf.copy_from_slice(&self_buf[0..buf.len()]);
 
+        Ok(())
+    }
+    pub async fn drain(&mut self, size: usize) -> io::Result<()> {
+        let mut buf = vec![0u8; size];
+        self.read_exact(&mut buf).await?;
         Ok(())
     }
 }
