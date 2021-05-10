@@ -6,7 +6,7 @@ fallback = "127.0.0.1:80"
 
 [tls]
 listen = "127.0.0.1:8888" #default: "0.0.0.0:443"
-sni = "example.com"
+sni = "dev.llc.moe"
 cert = "fullchain.pem"
 key = "privkey.pem"
 

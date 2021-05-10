@@ -1,5 +1,5 @@
-mod server;
 mod inbound;
+mod server;
 mod utils;
 
 use anyhow::{Context, Result};

@@ -1,47 +1,52 @@
-use crate::inbound::tls;
+use crate::inbound;
 use crate::utils::config::Config;
-use anyhow::Result;
+use anyhow::{Context, Result};
 use log::{debug, info};
 use std::sync::Arc;
-use tokio::io::{copy, sink, AsyncWriteExt};
+use tokio::net::TcpListener;
 use tokio_rustls::rustls::Session;
 
 pub async fn start(config: Config) -> Result<()> {
     debug!("Loading Config: {:?}", &config);
-    let inbound = tls::TlsInbound::new(&config.tls).await?;
-    info!("Service started.");
+
+    let listener = TcpListener::bind(config.tls.listen.as_str())
+        .await
+        .context(format!("Failed to bind address {}", config.tls.listen))?;
+
+    let tls_inbound = inbound::tls::from(&config.tls)?;
     let tls_config = Arc::new(config.tls);
+
+    let fallback_inbound = inbound::fallback::from(inbound::fallback::Config {})?;
+
+    info!("Service started.");
+
     loop {
+        let (stream, peer_addr) = listener.accept().await?;
+        let tls_acceptor = tls_inbound.clone();
         let tls_config = tls_config.clone();
-        let (stream, peer_addr) = inbound.tcp_listener.accept().await?;
-        let acceptor = inbound.tls_acceptor.clone();
+
+        let fallback_acceptor = fallback_inbound.clone();
+
         let fut = async move {
             info!("Inbound connection from {}", peer_addr);
-            let mut output = sink();
-            let mut stream = acceptor.accept(stream).await?;
+            let stream = tls_acceptor.accept(stream).await?;
             let (_, session) = stream.get_ref();
             debug!(
                 "ALPN: {:?}",
                 session.get_alpn_protocol().unwrap_or_default()
             );
             debug!("SNI: {:?}", session.get_sni_hostname().unwrap_or_default());
-            // TODO: redirect to fallback on SNI mismatch
+
             match session.get_sni_hostname() {
-                Some(x) if x == tls_config.sni => (),
-                _ => (),
-            }
-            stream
-                .write_all(
-                    &b"HTTP/1.0 200 ok\r\n\
-                    Connection: close\r\n\
-                    Content-length: 12\r\n\
-                    \r\n\
-                    Hello world!"[..],
-                )
-                .await?;
-            stream.shutdown().await?;
-            copy(&mut stream, &mut output).await?;
-            info!("Hello: {}", peer_addr);
+                Some(x) if x == tls_config.sni => {
+                    info!("SNI match.");
+                    // trojan_acceptor.accept(stream).await?
+                }
+                _ => {
+                    info!("SNI mismatch. Redirect to fallback.");
+                    fallback_acceptor.accept(stream).await?
+                }
+            };
 
             Ok(()) as Result<()>
         };
