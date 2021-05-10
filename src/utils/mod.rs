@@ -1,3 +1,3 @@
 pub mod config;
 pub mod logger;
-mod peekable_stream;
+pub mod peekable_stream;

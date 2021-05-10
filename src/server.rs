@@ -1,9 +1,9 @@
-use crate::inbound;
 use crate::utils::config::Config;
+use crate::{inbound, utils::peekable_stream::PeekableStream};
 use anyhow::{Context, Result};
 use log::{debug, info};
 use std::sync::Arc;
-use tokio::{io::AsyncWriteExt, net::TcpListener};
+use tokio::net::TcpListener;
 use tokio_rustls::rustls::Session;
 
 pub async fn start(config: Config) -> Result<()> {
@@ -19,6 +19,7 @@ pub async fn start(config: Config) -> Result<()> {
     let fallback_inbound = inbound::fallback::FallbackAcceptor::new(inbound::fallback::Config {
         target: config.trojan.fallback,
     })?;
+    let trojan_acceptor = inbound::trojan::TrojanAcceptor::new()?;
 
     info!("Service started.");
 
@@ -28,27 +29,36 @@ pub async fn start(config: Config) -> Result<()> {
         let tls_config = tls_config.clone();
 
         let fallback_acceptor = fallback_inbound.clone();
+        let trojan_acceptor = trojan_acceptor.clone();
 
         let fut = async move {
             info!("Inbound connection from {}", peer_addr);
-            let mut stream = tls_acceptor.accept(stream).await?;
+            let stream = tls_acceptor.accept(stream).await?;
             let (_, session) = stream.get_ref();
             debug!(
                 "ALPN: {:?}",
                 session.get_alpn_protocol().unwrap_or_default()
             );
             debug!("SNI: {:?}", session.get_sni_hostname().unwrap_or_default());
+            let sni_matched = session
+                .get_sni_hostname()
+                .map(|x| x == tls_config.sni)
+                .unwrap_or(false);
 
-            match session.get_sni_hostname() {
-                Some(x) if x == tls_config.sni => {
-                    info!("SNI match.");
-                    // trojan_acceptor.accept(stream).await?
-                    stream.shutdown().await?;
-                }
-                _ => {
-                    info!("SNI mismatch. Redirect to fallback.");
-                    fallback_acceptor.accept(stream).await?
-                }
+            let mut stream = PeekableStream::new(stream);
+
+            if sni_matched {
+                info!("SNI match.");
+                match trojan_acceptor.accept(&mut stream).await {
+                    Ok(()) => {}
+                    Err(e) => {
+                        debug!("Trojan accept error: {:?}. Redirect to fallback.", e);
+                        fallback_acceptor.accept(stream).await?;
+                    }
+                };
+            } else {
+                info!("SNI mismatch. Redirect to fallback.");
+                fallback_acceptor.accept(stream).await?;
             };
 
             Ok(()) as Result<()>
