@@ -2,10 +2,8 @@
 name = "trojan-rust"
 version = "0.1.0"
 edition = "2018"
-authors = ["llc1123 <i@llc.moe>"]
+authors = ["llc1123 <i@llc.moe>", "imspace <spacemeowx2@gmail.com>"]
 description = "Yet another trojan-gfw implementation in RRRRRRRRRRRust"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = "1.0.40"
