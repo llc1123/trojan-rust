@@ -3,7 +3,7 @@ use crate::utils::config::Config;
 use anyhow::{Context, Result};
 use log::{debug, info};
 use std::sync::Arc;
-use tokio::net::TcpListener;
+use tokio::{io::AsyncWriteExt, net::TcpListener};
 use tokio_rustls::rustls::Session;
 
 pub async fn start(config: Config) -> Result<()> {
@@ -29,7 +29,7 @@ pub async fn start(config: Config) -> Result<()> {
 
         let fut = async move {
             info!("Inbound connection from {}", peer_addr);
-            let stream = tls_acceptor.accept(stream).await?;
+            let mut stream = tls_acceptor.accept(stream).await?;
             let (_, session) = stream.get_ref();
             debug!(
                 "ALPN: {:?}",
@@ -41,10 +41,11 @@ pub async fn start(config: Config) -> Result<()> {
                 Some(x) if x == tls_config.sni => {
                     info!("SNI match.");
                     // trojan_acceptor.accept(stream).await?
+                    stream.shutdown().await?;
                 }
                 _ => {
                     info!("SNI mismatch. Redirect to fallback.");
-                    fallback_acceptor.accept(stream).await?
+                    fallback_acceptor.accept(&mut stream).await?
                 }
             };
 
@@ -58,6 +59,6 @@ pub async fn start(config: Config) -> Result<()> {
         });
     }
 
-    info!("Service stopped.");
-    Ok(())
+    // info!("Service stopped.");
+    // Ok(())
 }

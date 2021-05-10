@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::sync::Arc;
-use tokio::io::{copy, sink, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 pub struct Config {}
 
@@ -44,7 +44,7 @@ impl FallbackAcceptor {
         };
 
         stream.write(response.as_bytes()).await?;
-        stream.flush().await?;
+        stream.shutdown().await?;
 
         Ok(())
     }
