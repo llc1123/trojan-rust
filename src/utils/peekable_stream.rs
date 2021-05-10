@@ -25,7 +25,7 @@ where
         let (first, ..) = &self.buf.as_slices();
         if first.len() > 0 {
             let read = first.len().min(buf.remaining());
-            let unfilled = buf.initialize_unfilled_to(first.len());
+            let unfilled = buf.initialize_unfilled_to(read);
             unfilled[0..read].copy_from_slice(&first[0..read]);
             buf.advance(read);
 
