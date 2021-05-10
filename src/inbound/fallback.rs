@@ -1,55 +1,70 @@
 use anyhow::Result;
+use http::{Method, Request, Response, StatusCode};
+use hyper::{server::conn::Http, service::service_fn, Body};
 use std::sync::Arc;
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::{
+    io::{copy_bidirectional, AsyncRead, AsyncWrite},
+    net::TcpStream,
+};
 
-pub struct Config {}
+pub struct Config {
+    // to a http server, if it's empty, fallback will use builtin http server.
+    pub target: String,
+}
 
 #[derive(Clone)]
 pub struct FallbackAcceptor {
     inner: Arc<Config>,
 }
 
-impl From<Arc<Config>> for FallbackAcceptor {
-    fn from(inner: Arc<Config>) -> FallbackAcceptor {
-        FallbackAcceptor { inner }
-    }
-}
-
 impl FallbackAcceptor {
-    pub async fn accept<IO>(&self, mut stream: IO) -> Result<()>
+    pub fn new(config: Config) -> Result<FallbackAcceptor> {
+        Ok(FallbackAcceptor {
+            inner: Arc::new(config),
+        })
+    }
+    pub async fn accept<IO>(&self, stream: IO) -> Result<()>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin + 'static,
+    {
+        if self.inner.target.len() == 0 {
+            self.handle_builtin(stream).await
+        } else {
+            self.handle_forward(stream).await
+        }
+    }
+    async fn handle_builtin<IO>(&self, stream: IO) -> Result<()>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin + 'static,
+    {
+        Http::new()
+            .http1_only(true)
+            .http1_keep_alive(true)
+            .serve_connection(stream, service_fn(hello))
+            .await?;
+
+        Ok(())
+    }
+    async fn handle_forward<IO>(&self, mut stream: IO) -> Result<()>
     where
         IO: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut buffer = [0; 1024];
-        stream.read(&mut buffer).await.unwrap_or_default();
+        let mut outbound = TcpStream::connect(&self.inner.target).await?;
 
-        let mut headers = [http_bytes::EMPTY_HEADER; 16];
-
-        let response_400 = "HTTP/1.1 400 Bad Request\r\n\r\n";
-        let response_404 = "HTTP/1.1 404 Not Found\r\n\r\n";
-        let response_405 = "HTTP/1.1 405 Method Not Allowed\r\n\r\n";
-
-        let response = if let Some((req, _)) = http_bytes::parse_request_header(
-            &buffer,
-            &mut headers[..],
-            Some(http_bytes::http::uri::Scheme::HTTP),
-        )? {
-            if req.method() == http_bytes::http::method::Method::GET {
-                response_404
-            } else {
-                response_405
-            }
-        } else {
-            response_400
-        };
-
-        stream.write(response.as_bytes()).await?;
-        stream.shutdown().await?;
+        copy_bidirectional(&mut outbound, &mut stream).await?;
 
         Ok(())
     }
 }
 
-pub fn from(config: Config) -> Result<FallbackAcceptor> {
-    Ok(FallbackAcceptor::from(Arc::new(config)))
+async fn hello(req: Request<Body>) -> Result<Response<Body>, http::Error> {
+    if req.method() == Method::GET {
+        Response::builder()
+            .status(StatusCode::NOT_FOUND)
+            .body(Body::empty())
+    } else {
+        Response::builder()
+            .status(StatusCode::METHOD_NOT_ALLOWED)
+            .body(Body::empty())
+    }
 }

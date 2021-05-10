@@ -16,7 +16,9 @@ pub async fn start(config: Config) -> Result<()> {
     let tls_inbound = inbound::tls::from(&config.tls)?;
     let tls_config = Arc::new(config.tls);
 
-    let fallback_inbound = inbound::fallback::from(inbound::fallback::Config {})?;
+    let fallback_inbound = inbound::fallback::FallbackAcceptor::new(inbound::fallback::Config {
+        target: config.trojan.fallback,
+    })?;
 
     info!("Service started.");
 
@@ -45,7 +47,7 @@ pub async fn start(config: Config) -> Result<()> {
                 }
                 _ => {
                     info!("SNI mismatch. Redirect to fallback.");
-                    fallback_acceptor.accept(&mut stream).await?
+                    fallback_acceptor.accept(stream).await?
                 }
             };
 

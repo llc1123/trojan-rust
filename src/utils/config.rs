@@ -26,6 +26,7 @@ pub struct Config {
 pub struct Trojan {
     #[serde(default)]
     pub password: Vec<String>,
+    #[serde(default)]
     pub fallback: String,
 }
 
