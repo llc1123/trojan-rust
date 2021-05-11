@@ -1,7 +1,10 @@
 use crate::utils::config::Config;
-use crate::{inbound, utils::peekable_stream::PeekableStream};
+use crate::{
+    inbound::{fallback, tls, trojan},
+    utils::peekable_stream::PeekableStream,
+};
 use anyhow::{Context, Result};
-use log::{debug, info};
+use log::{debug, error, info};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_rustls::rustls::Session;
@@ -13,13 +16,16 @@ pub async fn start(config: Config) -> Result<()> {
         .await
         .context(format!("Failed to bind address {}", config.tls.listen))?;
 
-    let tls_inbound = inbound::tls::from(&config.tls)?;
+    let tls_inbound = tls::from(&config.tls).context("Failed to setup TLS server.")?;
     let tls_config = Arc::new(config.tls);
 
-    let fallback_inbound = inbound::fallback::FallbackAcceptor::new(inbound::fallback::Config {
+    let fallback_inbound = fallback::FallbackAcceptor::new(fallback::Config {
         target: config.trojan.fallback,
-    })?;
-    let trojan_acceptor = inbound::trojan::TrojanAcceptor::new()?;
+    })
+    .await
+    .context("Failed to setup fallback server.")?;
+
+    let trojan_acceptor = trojan::TrojanAcceptor::new()?;
 
     info!("Service started.");
 
@@ -48,7 +54,6 @@ pub async fn start(config: Config) -> Result<()> {
             let mut stream = PeekableStream::new(stream);
 
             if sni_matched {
-                info!("SNI match.");
                 match trojan_acceptor.accept(&mut stream).await {
                     Ok(()) => {}
                     Err(e) => {
@@ -66,7 +71,7 @@ pub async fn start(config: Config) -> Result<()> {
 
         tokio::spawn(async move {
             if let Err(err) = fut.await {
-                eprintln!("{:?}", err);
+                error!("{:?}", err);
             }
         });
     }

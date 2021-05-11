@@ -1,8 +1,8 @@
 # mode = "server" #default: "server"
 
-[trojan]
+# [trojan]
 # password = ["password"] #default: []
-fallback = "127.0.0.1:80" 
+# fallback = "baidu.com:80" 
 
 [tls]
 listen = "127.0.0.1:8888" #default: "0.0.0.0:443"

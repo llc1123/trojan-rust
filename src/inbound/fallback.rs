@@ -1,6 +1,7 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use http::{Method, Request, Response, StatusCode};
 use hyper::{server::conn::Http, service::service_fn, Body};
+use log::info;
 use std::sync::Arc;
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite},
@@ -18,7 +19,16 @@ pub struct FallbackAcceptor {
 }
 
 impl FallbackAcceptor {
-    pub fn new(config: Config) -> Result<FallbackAcceptor> {
+    pub async fn new(config: Config) -> Result<FallbackAcceptor> {
+        if config.target.len() != 0 {
+            TcpStream::connect(&config.target).await.context(format!(
+                "Fallback server {} is unavailable.",
+                &config.target
+            ))?;
+            info!("Using fallback {}.", &config.target);
+        } else {
+            info!("Using built-in fallback server.")
+        }
         Ok(FallbackAcceptor {
             inner: Arc::new(config),
         })
@@ -41,7 +51,8 @@ impl FallbackAcceptor {
             .http1_only(true)
             .http1_keep_alive(true)
             .serve_connection(stream, service_fn(hello))
-            .await?;
+            .await
+            .context("Built-in fallback error.")?;
 
         Ok(())
     }
@@ -49,9 +60,13 @@ impl FallbackAcceptor {
     where
         IO: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut outbound = TcpStream::connect(&self.inner.target).await?;
+        let mut outbound = TcpStream::connect(&self.inner.target)
+            .await
+            .context("Cannot connect to fallback.")?;
 
-        copy_bidirectional(&mut outbound, &mut stream).await?;
+        copy_bidirectional(&mut outbound, &mut stream)
+            .await
+            .context("Cannot redirect stream to fallback.")?;
 
         Ok(())
     }

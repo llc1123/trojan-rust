@@ -17,12 +17,13 @@ impl Default for Mode {
 pub struct Config {
     #[serde(default)]
     pub mode: Mode,
+    #[serde(default)]
     pub trojan: Trojan,
     pub tls: Tls,
     pub redis: Option<Redis>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 pub struct Trojan {
     #[serde(default)]
     pub password: Vec<String>,
