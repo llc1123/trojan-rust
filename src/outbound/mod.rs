@@ -1,18 +1,16 @@
 pub mod direct;
 
-use std::net::SocketAddr;
+use std::{io, net::SocketAddr, pin::Pin};
 
 use futures::{Sink, Stream};
 use tokio::net::TcpStream;
 
-type UdpPacket = (Vec<u8>, SocketAddr);
-trait UdpStream: Stream<Item = UdpPacket> + Sink<UdpPacket, Error = std::io::Error> + Sized {}
-impl<T> UdpStream for T where
-    T: Stream<Item = UdpPacket> + Sink<UdpPacket, Error = std::io::Error> + Sized
-{
-}
+pub type UdpPacket = (Vec<u8>, SocketAddr);
+pub trait UdpStream: Stream<Item = UdpPacket> + Sink<UdpPacket, Error = io::Error> {}
+impl<T> UdpStream for T where T: Stream<Item = UdpPacket> + Sink<UdpPacket, Error = io::Error> {}
+pub type BoxedUdpStream = Pin<Box<dyn UdpStream>>;
 
 pub enum OutboundStream {
     Tcp(TcpStream, String),
-    Udp(Box<dyn UdpStream>),
+    Udp(BoxedUdpStream),
 }
