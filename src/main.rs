@@ -1,3 +1,4 @@
+mod auth;
 mod inbound;
 mod outbound;
 mod server;

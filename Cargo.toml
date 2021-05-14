@@ -22,3 +22,5 @@ futures = "0.3.14"
 socks5-protocol = "0.3.2"
 tokio-util = { version = "0.6.6", features = ["codec"] }
 bytes = "1.0.1"
+async-trait = "0.1.50"
+sha2 = "0.9.5"
