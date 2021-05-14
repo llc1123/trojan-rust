@@ -15,7 +15,7 @@ impl ConfigAuthenticator {
             let mut hasher = Sha224::new();
             hasher.update(p.into_bytes());
             let result = hasher.finalize();
-            s.insert(hex::encode(&result));
+            s.insert(hex::encode(result));
         }
         Ok(ConfigAuthenticator { store: s })
     }
