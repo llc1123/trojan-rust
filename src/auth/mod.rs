@@ -3,9 +3,8 @@ pub mod redis;
 
 use self::{from_config::ConfigAuthenticator, redis::RedisAuthenticator};
 use crate::utils::config::Config;
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
-use log::error;
 
 #[async_trait]
 pub trait Auth {
@@ -13,20 +12,20 @@ pub trait Auth {
     async fn stat(&self, password: String, upload: u64, download: u64) -> Result<()>;
 }
 
-pub struct Authenticator {
+pub struct AuthHub {
     config_auth: ConfigAuthenticator,
     redis_auth: Option<RedisAuthenticator>,
 }
 
-impl Authenticator {
-    pub async fn new(config: &Config) -> Result<Authenticator> {
+impl AuthHub {
+    pub async fn new(config: &Config) -> Result<AuthHub> {
         let config_auth = ConfigAuthenticator::new(config.trojan.password)?;
         match config.redis {
-            Some(redis) => Ok(Authenticator {
+            Some(redis) => Ok(AuthHub {
                 config_auth,
                 redis_auth: Some(RedisAuthenticator::new(redis.server)?),
             }),
-            None => Ok(Authenticator {
+            None => Ok(AuthHub {
                 config_auth,
                 redis_auth: None,
             }),
@@ -35,7 +34,7 @@ impl Authenticator {
 }
 
 #[async_trait]
-impl Auth for Authenticator {
+impl Auth for AuthHub {
     async fn auth(&self, password: String) -> Result<bool> {
         if self.config_auth.auth(password).await? {
             Ok(true)
@@ -58,7 +57,7 @@ impl Auth for Authenticator {
                     } else {
                         Err(anyhow!("User {} not found.", &password))
                     }
-                },
+                }
                 None => Err(anyhow!("User {} not found.", &password)),
             }
         }
