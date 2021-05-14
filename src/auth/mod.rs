@@ -20,15 +20,13 @@ pub struct AuthHub {
 impl AuthHub {
     pub async fn new(config: &Config) -> Result<AuthHub> {
         let config_auth = ConfigAuthenticator::new(config.trojan.password)?;
+        let mut redis_auth: Option<RedisAuthenticator> = None;
         if let Some(redis) = config.redis {
-            return Ok(AuthHub {
-                config_auth,
-                redis_auth: Some(RedisAuthenticator::new(redis.server)?),
-            });
+            redis_auth = Some(RedisAuthenticator::new(redis.server)?);
         }
         Ok(AuthHub {
             config_auth,
-            redis_auth: None,
+            redis_auth,
         })
     }
 }
