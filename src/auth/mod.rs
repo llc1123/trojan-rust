@@ -12,6 +12,7 @@ pub trait Auth {
     async fn stat(&self, password: String, upload: u64, download: u64) -> Result<()>;
 }
 
+#[derive(Clone)]
 pub struct AuthHub {
     config_auth: ConfigAuthenticator,
     redis_auth: Option<RedisAuthenticator>,

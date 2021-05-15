@@ -2,10 +2,11 @@ use super::Auth;
 use anyhow::Result;
 use async_trait::async_trait;
 use sha2::{Digest, Sha224};
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::Arc};
 
+#[derive(Clone)]
 pub struct ConfigAuthenticator {
-    store: HashSet<String>,
+    store: Arc<HashSet<String>>,
 }
 
 impl ConfigAuthenticator {
@@ -17,7 +18,7 @@ impl ConfigAuthenticator {
             let result = hasher.finalize();
             s.insert(hex::encode(result));
         }
-        Ok(ConfigAuthenticator { store: s })
+        Ok(ConfigAuthenticator { store: Arc::new(s) })
     }
 }
 

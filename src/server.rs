@@ -1,4 +1,4 @@
-use crate::utils::config::Config;
+use crate::{auth::AuthHub, utils::config::Config};
 use crate::{
     inbound::{fallback, tls, trojan},
     utils::peekable_stream::PeekableStream,
@@ -12,9 +12,9 @@ use tokio_rustls::rustls::Session;
 pub async fn start(config: Config) -> Result<()> {
     debug!("Loading Config: {:?}", &config);
 
-    let listener = TcpListener::bind(config.tls.listen.as_str())
+    let listener = TcpListener::bind(&config.tls.listen.as_str())
         .await
-        .context(format!("Failed to bind address {}", config.tls.listen))?;
+        .context(format!("Failed to bind address {}", &config.tls.listen))?;
 
     let tls_inbound = tls::from(&config.tls).context("Failed to setup TLS server.")?;
     let tls_config = Arc::new(config.tls);
@@ -25,6 +25,8 @@ pub async fn start(config: Config) -> Result<()> {
     .await
     .context("Failed to setup fallback server.")?;
 
+    let auth_hub = AuthHub::new(&config).await?;
+
     let trojan_acceptor = trojan::TrojanAcceptor::new()?;
 
     info!("Service started.");
@@ -33,8 +35,8 @@ pub async fn start(config: Config) -> Result<()> {
         let (stream, peer_addr) = listener.accept().await?;
         let tls_acceptor = tls_inbound.clone();
         let tls_config = tls_config.clone();
-
         let fallback_acceptor = fallback_inbound.clone();
+        let auth_hub = auth_hub.clone();
         let trojan_acceptor = trojan_acceptor.clone();
 
         let fut = async move {
