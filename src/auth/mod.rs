@@ -21,8 +21,8 @@ impl AuthHub {
     pub async fn new(config: &Config) -> Result<AuthHub> {
         let config_auth = ConfigAuthenticator::new(config.trojan.password.clone())?;
         let mut redis_auth: Option<RedisAuthenticator> = None;
-        if let Some(redis) = config.redis.clone() {
-            redis_auth = Some(RedisAuthenticator::new(redis.server)?);
+        if let Some(redis) = &config.redis {
+            redis_auth = Some(RedisAuthenticator::new(redis.server.clone())?);
         }
         Ok(AuthHub {
             config_auth,
