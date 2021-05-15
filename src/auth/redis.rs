@@ -28,7 +28,7 @@ impl Auth for RedisAuthenticator {
             .await
             .context("Cannot create connection to redis server.")?;
         Ok(con
-            .exists(&password)
+            .exists::<_, bool>(&password)
             .await
             .context("Executing command EXISTS failed.")?)
     }
