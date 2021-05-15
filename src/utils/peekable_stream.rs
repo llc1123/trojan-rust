@@ -97,8 +97,8 @@ where
         Ok(())
     }
     pub async fn drain(&mut self, size: usize) -> io::Result<()> {
-        let mut buf = vec![0u8; size];
-        self.read_exact(&mut buf).await?;
+        self.fill_buf(size).await?;
+        self.buf.drain(0..size);
         Ok(())
     }
 }

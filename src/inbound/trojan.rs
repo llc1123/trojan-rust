@@ -46,7 +46,7 @@ impl TrojanAcceptor {
 
         let req = CommandRequest::read_from(&mut reader)?;
         let end = reader.position() + 2;
-        stream.drain(end as usize).await;
+        stream.drain(end as usize).await?;
 
         match req.command {
             Command::Connect => Ok(OutboundStream::Tcp(stream, req.address.to_string())),
