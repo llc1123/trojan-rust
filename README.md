@@ -9,6 +9,8 @@
 ## How the fallback server (usually) works
 
 - Not HTTP Request: 400 Bad Request
-- HTTP Request: 404 Not Found
+- HTTP Request: 
+  - GET: 404 Not Found
+  - Other: 405 Methon Not Allowed
 
 _This is like most cdn endpoints' behavior if you don't have a correct resource path._
