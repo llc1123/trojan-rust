@@ -12,12 +12,12 @@ use log::{debug, error, info};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{rustls::Session, TlsAcceptor};
+use trojan::Cmd;
 
 struct ConnectionConfig {
     tls_acceptor: TlsAcceptor,
     sni: String,
     fallback_acceptor: FallbackAcceptor,
-    auth_hub: AuthHub,
     trojan_acceptor: TrojanAcceptor,
 }
 
@@ -40,7 +40,12 @@ impl ConnectionConfig {
 
         if sni_matched {
             match self.trojan_acceptor.accept(&mut stream).await {
-                Ok(()) => {}
+                Ok(Cmd::Connect) => {
+                    todo!("Connect")
+                }
+                Ok(Cmd::UdpAssociate) => {
+                    todo!("Udp")
+                }
                 Err(e) => {
                     debug!("Trojan accept error: {:?}. Redirect to fallback.", e);
                     self.fallback_acceptor.accept(stream).await?;
@@ -68,13 +73,12 @@ pub async fn start(config: Config) -> Result<()> {
         .await
         .context("Failed to setup fallback server.")?;
 
-    let trojan_acceptor = trojan::TrojanAcceptor::new()?;
+    let trojan_acceptor = trojan::TrojanAcceptor::new(auth_hub)?;
 
     let conn_cfg = Arc::new(ConnectionConfig {
         tls_acceptor,
         sni: config.tls.sni,
         fallback_acceptor,
-        auth_hub,
         trojan_acceptor,
     });
 

@@ -1,29 +1,60 @@
-use std::io;
+use std::io::{self, Cursor};
 
 use anyhow::{bail, Result};
 use bytes::{Buf, BufMut, BytesMut};
-use socks5_protocol::{sync::FromIO, Address};
+use socks5_protocol::{sync::FromIO, Address, Command, CommandRequest};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder};
 
-use crate::{outbound::UdpPacket, utils::peekable_stream::PeekableStream};
+const CMD: usize = 58;
 
-#[derive(Clone)]
-pub struct TrojanAcceptor {}
+pub enum Cmd {
+    Connect,
+    UdpAssociate,
+}
+
+use crate::{
+    auth::{Auth, AuthHub},
+    outbound::UdpPacket,
+    utils::peekable_stream::PeekableStream,
+};
+
+pub struct TrojanAcceptor {
+    auth_hub: AuthHub,
+}
 
 impl TrojanAcceptor {
-    pub fn new() -> Result<TrojanAcceptor> {
-        Ok(TrojanAcceptor {})
+    pub fn new(auth_hub: AuthHub) -> Result<TrojanAcceptor> {
+        Ok(TrojanAcceptor { auth_hub })
     }
 
-    pub async fn accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<()>
+    pub async fn accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<Cmd>
     where
         IO: AsyncRead + AsyncWrite + Unpin + 'static,
     {
-        let mut buf = [0u8; 10];
+        let mut buf = vec![0u8; 56 + 2 + 2];
         stream.peek_exact(&mut buf).await?;
-        bail!("todo")
-        // Don't forget to stream.drain(10)
+
+        let password = String::from_utf8_lossy(&buf[0..56]);
+        if !self.auth_hub.auth(&password).await? {
+            bail!("Auth failed")
+        }
+
+        let mut reader = Cursor::new(buf);
+        // skip password and CRLF
+        reader.advance(CMD);
+
+        let req = CommandRequest::read_from(&mut reader)?;
+        let end = reader.position() + 2;
+        stream.drain(end as usize).await;
+
+        let cmd = match req.command {
+            Command::Connect => Cmd::Connect,
+            Command::UdpAssociate => Cmd::UdpAssociate,
+            _ => bail!("Unsupported Command: Bind"),
+        };
+
+        Ok(cmd)
     }
 }
 
