@@ -8,8 +8,8 @@ use async_trait::async_trait;
 
 #[async_trait]
 pub trait Auth {
-    async fn auth(&self, password: String) -> Result<bool>;
-    async fn stat(&self, password: String, upload: u64, download: u64) -> Result<()>;
+    async fn auth(&self, password: &str) -> Result<bool>;
+    async fn stat(&self, password: &str, upload: u64, download: u64) -> Result<()>;
 }
 
 #[derive(Clone)]
@@ -20,9 +20,9 @@ pub struct AuthHub {
 
 impl AuthHub {
     pub async fn new(config: &Config) -> Result<AuthHub> {
-        let config_auth = ConfigAuthenticator::new(config.trojan.password)?;
+        let config_auth = ConfigAuthenticator::new(config.trojan.password.clone())?;
         let mut redis_auth: Option<RedisAuthenticator> = None;
-        if let Some(redis) = config.redis {
+        if let Some(redis) = config.redis.clone() {
             redis_auth = Some(RedisAuthenticator::new(redis.server)?);
         }
         Ok(AuthHub {
@@ -34,21 +34,21 @@ impl AuthHub {
 
 #[async_trait]
 impl Auth for AuthHub {
-    async fn auth(&self, password: String) -> Result<bool> {
-        if self.config_auth.auth(password).await? {
+    async fn auth(&self, password: &str) -> Result<bool> {
+        if self.config_auth.auth(&password).await? {
             return Ok(true);
         }
-        if let Some(redis) = self.redis_auth {
+        if let Some(redis) = &self.redis_auth {
             return Ok(redis.auth(password).await?);
         }
         Ok(false)
     }
 
-    async fn stat(&self, password: String, upload: u64, download: u64) -> Result<()> {
+    async fn stat(&self, password: &str, upload: u64, download: u64) -> Result<()> {
         if self.config_auth.auth(password).await? {
             return Ok(self.config_auth.stat(password, upload, download).await?);
         }
-        if let Some(redis) = self.redis_auth {
+        if let Some(redis) = &self.redis_auth {
             if redis.auth(password).await? {
                 return Ok(redis.stat(password, upload, download).await?);
             }

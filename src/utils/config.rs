@@ -48,7 +48,7 @@ fn default_redis() -> String {
     String::from("127.0.0.1:6379")
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 pub struct Redis {
     #[serde(default = "default_redis")]
     pub server: String,

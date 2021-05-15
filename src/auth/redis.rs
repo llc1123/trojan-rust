@@ -21,19 +21,19 @@ impl RedisAuthenticator {
 
 #[async_trait]
 impl Auth for RedisAuthenticator {
-    async fn auth(&self, password: String) -> Result<bool> {
+    async fn auth(&self, password: &str) -> Result<bool> {
         let mut con = self
             .client
             .get_async_connection()
             .await
             .context("Cannot create connection to redis server.")?;
         Ok(con
-            .exists::<_, bool>(&password)
+            .exists::<_, bool>(password)
             .await
             .context("Executing command EXISTS failed.")?)
     }
 
-    async fn stat(&self, password: String, upload: u64, download: u64) -> Result<()> {
+    async fn stat(&self, password: &str, upload: u64, download: u64) -> Result<()> {
         let mut con = self
             .client
             .get_async_connection()
@@ -41,8 +41,8 @@ impl Auth for RedisAuthenticator {
             .context("Cannot create connection to redis server.")?;
         Ok(redis::pipe()
             .atomic()
-            .hincr(&password, "upload", upload)
-            .hincr(&password, "download", download)
+            .hincr(password, "upload", upload)
+            .hincr(password, "download", download)
             .query_async::<_, ()>(&mut con)
             .await
             .context("Executing command MULTI failed.")?)

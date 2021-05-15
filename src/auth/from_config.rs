@@ -24,11 +24,11 @@ impl ConfigAuthenticator {
 
 #[async_trait]
 impl Auth for ConfigAuthenticator {
-    async fn auth(&self, password: String) -> Result<bool> {
-        Ok(self.store.contains(&password))
+    async fn auth(&self, password: &str) -> Result<bool> {
+        Ok(self.store.contains(password))
     }
 
-    async fn stat(&self, password: String, _: u64, _: u64) -> Result<()> {
+    async fn stat(&self, password: &str, _: u64, _: u64) -> Result<()> {
         self.auth(password).await?;
         Ok(())
     }
