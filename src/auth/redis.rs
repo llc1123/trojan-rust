@@ -8,8 +8,8 @@ pub struct RedisAuthenticator {
 }
 
 impl RedisAuthenticator {
-    pub fn new(server: String) -> Result<RedisAuthenticator> {
-        let client = redis::Client::open(format!("redis://{}/", &server))
+    pub fn new(server: &str) -> Result<RedisAuthenticator> {
+        let client = redis::Client::open(format!("redis://{}/", server))
             .context(format!("Redis server {} unavailable.", &server))?;
         Ok(RedisAuthenticator { client })
     }

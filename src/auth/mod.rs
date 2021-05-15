@@ -22,7 +22,7 @@ impl AuthHub {
         let config_auth = ConfigAuthenticator::new(config.trojan.password.clone())?;
         let mut redis_auth: Option<RedisAuthenticator> = None;
         if let Some(redis) = &config.redis {
-            redis_auth = Some(RedisAuthenticator::new(redis.server.clone())?);
+            redis_auth = Some(RedisAuthenticator::new(&redis.server)?);
         }
         Ok(AuthHub {
             config_auth,
