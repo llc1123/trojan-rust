@@ -2,20 +2,17 @@ use super::Auth;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use redis::AsyncCommands;
-use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct RedisAuthenticator {
-    client: Arc<redis::Client>,
+    client: redis::Client,
 }
 
 impl RedisAuthenticator {
     pub fn new(server: String) -> Result<RedisAuthenticator> {
         let client = redis::Client::open(format!("redis://{}/", &server))
             .context(format!("Redis server {} unavailable.", &server))?;
-        Ok(RedisAuthenticator {
-            client: Arc::new(client),
-        })
+        Ok(RedisAuthenticator { client })
     }
 }
 

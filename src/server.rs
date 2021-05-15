@@ -1,7 +1,7 @@
-use crate::{auth::AuthHub, utils::config::Config};
 use crate::{
-    inbound::{fallback, tls, trojan},
-    utils::peekable_stream::PeekableStream,
+    auth::AuthHub,
+    inbound::{fallback::FallbackAcceptor, tls, trojan},
+    utils::{config::Config, peekable_stream::PeekableStream},
 };
 use anyhow::{Context, Result};
 use log::{debug, error, info};
@@ -16,15 +16,15 @@ pub async fn start(config: Config) -> Result<()> {
         .await
         .context(format!("Failed to bind address {}", &config.tls.listen))?;
 
-    let auth_hub = AuthHub::new(&config).await?;
+    let auth_hub = Arc::new(AuthHub::new(&config).await?);
     let tls_inbound = tls::from(&config.tls).context("Failed to setup TLS server.")?;
-    let tls_config = Arc::new(config.tls);
+    let sni = &config.tls.sni;
 
-    let fallback_inbound = fallback::FallbackAcceptor::new(fallback::Config {
-        target: config.trojan.fallback,
-    })
-    .await
-    .context("Failed to setup fallback server.")?;
+    let fallback_inbound = Arc::new(
+        FallbackAcceptor::new(config.trojan.fallback)
+            .await
+            .context("Failed to setup fallback server.")?,
+    );
 
     let trojan_acceptor = trojan::TrojanAcceptor::new()?;
 
@@ -33,7 +33,7 @@ pub async fn start(config: Config) -> Result<()> {
     loop {
         let (stream, peer_addr) = listener.accept().await?;
         let tls_acceptor = tls_inbound.clone();
-        let tls_config = tls_config.clone();
+        let sni = sni.clone();
         let fallback_acceptor = fallback_inbound.clone();
         let auth_hub = auth_hub.clone();
         let trojan_acceptor = trojan_acceptor.clone();
@@ -49,7 +49,7 @@ pub async fn start(config: Config) -> Result<()> {
             debug!("SNI: {:?}", session.get_sni_hostname().unwrap_or_default());
             let sni_matched = session
                 .get_sni_hostname()
-                .map(|x| x == tls_config.sni)
+                .map(|x| x == sni)
                 .unwrap_or(false);
 
             let mut stream = PeekableStream::new(stream);

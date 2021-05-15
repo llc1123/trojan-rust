@@ -2,42 +2,33 @@ use anyhow::{Context, Result};
 use http::{Method, Request, Response, StatusCode};
 use hyper::{server::conn::Http, service::service_fn, Body};
 use log::info;
-use std::sync::Arc;
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::TcpStream,
 };
 
-pub struct Config {
-    // to a http server, if it's empty, fallback will use builtin http server.
-    pub target: String,
-}
-
-#[derive(Clone)]
 pub struct FallbackAcceptor {
-    inner: Arc<Config>,
+    // to a http server, if it's empty, fallback will use builtin http server.
+    target: String,
 }
 
 impl FallbackAcceptor {
-    pub async fn new(config: Config) -> Result<FallbackAcceptor> {
-        if config.target.len() != 0 {
-            TcpStream::connect(&config.target).await.context(format!(
-                "Fallback server {} is unavailable.",
-                &config.target
-            ))?;
-            info!("Using fallback {}.", &config.target);
+    pub async fn new(target: String) -> Result<FallbackAcceptor> {
+        if target.len() != 0 {
+            TcpStream::connect(&target)
+                .await
+                .context(format!("Fallback server {} is unavailable.", &target))?;
+            info!("Using fallback {}.", &target);
         } else {
             info!("Using built-in fallback server.")
         }
-        Ok(FallbackAcceptor {
-            inner: Arc::new(config),
-        })
+        Ok(FallbackAcceptor { target })
     }
     pub async fn accept<IO>(&self, stream: IO) -> Result<()>
     where
         IO: AsyncRead + AsyncWrite + Unpin + 'static,
     {
-        if self.inner.target.len() == 0 {
+        if self.target.len() == 0 {
             self.handle_builtin(stream).await
         } else {
             self.handle_forward(stream).await
@@ -60,7 +51,7 @@ impl FallbackAcceptor {
     where
         IO: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut outbound = TcpStream::connect(&self.inner.target)
+        let mut outbound = TcpStream::connect(&self.target)
             .await
             .context("Cannot connect to fallback.")?;
 
