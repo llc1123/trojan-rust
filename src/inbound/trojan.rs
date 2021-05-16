@@ -40,7 +40,7 @@ impl TrojanAcceptor {
                 Ok(OutboundStream::Udp(Box::pin(Framed::new(stream, UdpCodec))))
             }
             Err(e) => {
-                info!("Trojan accept error: {:?}. Redirect to fallback.", e);
+                info!("Redirect to fallback: {:?}", e);
                 return Err(stream);
             }
         }
@@ -54,6 +54,9 @@ impl TrojanAcceptor {
         stream.peek_exact(&mut buf).await?;
 
         let password = String::from_utf8_lossy(&buf[0..56]);
+        if let Err(_) = hex::decode(password) {
+            bail!("Not trojan request.")
+        }
         if !self.auth_hub.auth(&password).await? {
             bail!("Auth failed")
         }
