@@ -130,28 +130,41 @@ impl Encoder<UdpPacket> for UdpCodec {
     }
 }
 
+fn copy_2(b: &[u8]) -> [u8; 2] {
+    let mut buf = [0u8; 2];
+    buf.copy_from_slice(&b);
+    buf
+}
+
 impl Decoder for UdpCodec {
     type Item = UdpPacket;
     type Error = io::Error;
 
     fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let mut reader = src.reader();
-        let result = Address::read_from(&mut reader);
-        let src = reader.into_inner();
-
-        let address = match result {
-            Ok(a) => a,
-            Err(socks5_protocol::Error::Io(e)) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                return Ok(None);
-            }
-            Err(e) => return Err(e.to_io_err()),
+        if src.len() < 2 {
+            return Ok(None);
+        }
+        let head = copy_2(&src[0..2]);
+        let addr_size = match head[0] {
+            1 => 7,
+            3 => 1 + head[1] as usize + 2,
+            4 => 19,
+            _ => return Err(io::ErrorKind::InvalidData.into()),
         };
-        if src.remaining() < 4 {
+        if src.len() < addr_size + 4 {
+            return Ok(None);
+        }
+        let length = u16::from_be_bytes(copy_2(&src[addr_size..addr_size + 2])) as usize;
+        if src.len() < addr_size + 4 + length {
             return Ok(None);
         }
 
-        let length = src.get_u16();
-        // CrLf
+        let mut reader = src.reader();
+        let address = Address::read_from(&mut reader).map_err(|e| e.to_io_err())?;
+        let src = reader.into_inner();
+
+        // Length and CrLf
+        src.get_u16();
         src.get_u16();
 
         let mut buf = vec![0u8; length as usize];
