@@ -1,6 +1,6 @@
 use std::io;
 
-use super::{BoxedUdpStream, OutboundStream, UdpStream};
+use super::{BoxedUdpStream, OutboundStream};
 use anyhow::{Context, Result};
 use futures::{SinkExt, StreamExt};
 use log::info;

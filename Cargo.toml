@@ -19,7 +19,7 @@ toml = "0.5.8"
 hyper = { version = "0.14.7", features = ["http1", "server"] }
 http = "0.2"
 futures = "0.3.14"
-socks5-protocol = "0.3.2"
+socks5-protocol = "0.3.3"
 tokio-util = { version = "0.6.6", features = ["codec"] }
 bytes = "1.0.1"
 async-trait = "0.1.50"

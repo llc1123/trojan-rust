@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use bytes::{Buf, BufMut, BytesMut};
 use socks5_protocol::{sync::FromIO, Address, Command, CommandRequest};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_util::codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder, Framed};
 
 const CMD: usize = 58;
 
@@ -15,7 +15,7 @@ pub enum Cmd {
 
 use crate::{
     auth::{Auth, AuthHub},
-    outbound::UdpPacket,
+    outbound::{OutboundStream, UdpPacket},
     utils::peekable_stream::PeekableStream,
 };
 
@@ -28,7 +28,7 @@ impl TrojanAcceptor {
         Ok(TrojanAcceptor { auth_hub })
     }
 
-    pub async fn accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<Cmd>
+    pub async fn accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<OutboundStream>
     where
         IO: AsyncRead + AsyncWrite + Unpin + 'static,
     {
@@ -48,13 +48,14 @@ impl TrojanAcceptor {
         let end = reader.position() + 2;
         stream.drain(end as usize).await;
 
-        let cmd = match req.command {
-            Command::Connect => Cmd::Connect,
-            Command::UdpAssociate => Cmd::UdpAssociate,
-            _ => bail!("Unsupported Command: Bind"),
-        };
-
-        Ok(cmd)
+        match req.command {
+            Command::Connect => Ok(OutboundStream::Tcp(stream, req.address.to_string())),
+            Command::UdpAssociate => Ok(OutboundStream::Udp(Box::new(Framed::new(
+                stream,
+                UdpCodec {},
+            )))),
+            _ => bail!("Unknown command."),
+        }
     }
 }
 

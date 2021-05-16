@@ -5,6 +5,7 @@ use crate::{
         tls,
         trojan::{self, TrojanAcceptor},
     },
+    outbound::direct,
     utils::{config::Config, peekable_stream::PeekableStream},
 };
 use anyhow::{Context, Result};
@@ -12,7 +13,6 @@ use log::{debug, error, info};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{rustls::Session, TlsAcceptor};
-use trojan::Cmd;
 
 struct ConnectionConfig {
     tls_acceptor: TlsAcceptor,
@@ -40,12 +40,7 @@ impl ConnectionConfig {
 
         if sni_matched {
             match self.trojan_acceptor.accept(&mut stream).await {
-                Ok(Cmd::Connect) => {
-                    todo!("Connect")
-                }
-                Ok(Cmd::UdpAssociate) => {
-                    todo!("Udp")
-                }
+                Ok(out) => direct::accept(out).await?,
                 Err(e) => {
                     debug!("Trojan accept error: {:?}. Redirect to fallback.", e);
                     self.fallback_acceptor.accept(stream).await?;
