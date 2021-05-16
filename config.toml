@@ -1,7 +1,7 @@
 # mode = "server" #default: "server"
 
-# [trojan]
-# password = ["password"] #default: []
+[trojan]
+password = ["114514"] #default: []
 # fallback = "baidu.com:80" 
 
 [tls]

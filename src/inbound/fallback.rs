@@ -43,7 +43,9 @@ impl FallbackAcceptor {
             .http1_keep_alive(true)
             .serve_connection(stream, service_fn(hello))
             .await
-            .context("Built-in fallback error.")?;
+            .unwrap_or_else(|_| {
+                info!("Fallback: Invalid HTTP method.");
+            });
 
         Ok(())
     }

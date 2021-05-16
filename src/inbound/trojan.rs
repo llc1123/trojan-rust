@@ -39,7 +39,7 @@ impl TrojanAcceptor {
                 Ok(OutboundStream::Udp(Box::pin(Framed::new(stream, UdpCodec))))
             }
             Err(e) => {
-                log::debug!("Trojan accept error: {:?}. Redirect to fallback.", e);
+                log::info!("Trojan accept error: {:?}. Redirect to fallback.", e);
                 return Err(stream);
             }
         }
