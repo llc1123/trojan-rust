@@ -58,7 +58,7 @@ impl TrojanAcceptor {
             bail!("Not trojan request.")
         }
         if !self.auth_hub.auth(&password).await? {
-            bail!("Auth failed: {}", &password)
+            bail!("{}", &password)
         }
 
         let mut reader = Cursor::new(buf);

@@ -44,7 +44,7 @@ impl ConnectionConfig {
                 }
             };
         } else {
-            info!("SNI mismatch. Redirect to fallback.");
+            info!("Redirect to fallback: SNI mismatch.");
             self.fallback_acceptor.accept(stream).await?;
         };
 
