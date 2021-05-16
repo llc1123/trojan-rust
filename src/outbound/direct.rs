@@ -2,10 +2,10 @@ use std::io;
 
 use super::{BoxedUdpStream, OutboundStream};
 use anyhow::{Context, Result};
-use futures::{SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::info;
 use tokio::{
-    io::copy_bidirectional,
+    io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::{TcpStream, UdpSocket},
     select,
 };
@@ -19,7 +19,7 @@ pub async fn accept(s: OutboundStream) -> Result<()> {
     }
 }
 
-async fn handle_tcp(mut s: TcpStream, addr: String) -> Result<()> {
+async fn handle_tcp(mut s: impl AsyncRead + AsyncWrite + Unpin, addr: String) -> Result<()> {
     let mut outbound_stream = TcpStream::connect(&addr)
         .await
         .context(format!("Unable to connect to target {}", &addr))?;
@@ -46,7 +46,7 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
     };
     let outbound = async {
         loop {
-            while let Some((buf, addr)) = stream.next().await {
+            while let Some((buf, addr)) = stream.try_next().await? {
                 udp.send_to(&buf, addr).await?;
             }
         }

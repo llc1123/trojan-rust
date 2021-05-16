@@ -9,7 +9,7 @@ use tokio_util::codec::{Decoder, Encoder, Framed};
 const CMD: usize = 58;
 
 pub enum Cmd {
-    Connect,
+    Connect(String),
     UdpAssociate,
 }
 
@@ -28,9 +28,26 @@ impl TrojanAcceptor {
         Ok(TrojanAcceptor { auth_hub })
     }
 
-    pub async fn accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<OutboundStream>
+    pub async fn accept<IO>(&self, stream: IO) -> Result<OutboundStream, PeekableStream<IO>>
     where
-        IO: AsyncRead + AsyncWrite + Unpin + 'static,
+        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
+        let mut stream = PeekableStream::new(stream);
+        match self.inner_accept(&mut stream).await {
+            Ok(Cmd::Connect(addr)) => Ok(OutboundStream::Tcp(Box::new(stream), addr)),
+            Ok(Cmd::UdpAssociate) => {
+                Ok(OutboundStream::Udp(Box::pin(Framed::new(stream, UdpCodec))))
+            }
+            Err(e) => {
+                log::debug!("Trojan accept error: {:?}. Redirect to fallback.", e);
+                return Err(stream);
+            }
+        }
+    }
+
+    async fn inner_accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<Cmd>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let mut buf = vec![0u8; 56 + 2 + 2];
         stream.peek_exact(&mut buf).await?;
@@ -49,11 +66,8 @@ impl TrojanAcceptor {
         stream.drain(end as usize).await?;
 
         match req.command {
-            Command::Connect => Ok(OutboundStream::Tcp(stream, req.address.to_string())),
-            Command::UdpAssociate => Ok(OutboundStream::Udp(Box::new(Framed::new(
-                stream,
-                UdpCodec {},
-            )))),
+            Command::Connect => Ok(Cmd::Connect(req.address.to_string())),
+            Command::UdpAssociate => Ok(Cmd::UdpAssociate),
             _ => bail!("Unknown command."),
         }
     }

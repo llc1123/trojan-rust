@@ -6,7 +6,7 @@ use crate::{
         trojan::{self, TrojanAcceptor},
     },
     outbound::direct,
-    utils::{config::Config, peekable_stream::PeekableStream},
+    utils::config::Config,
 };
 use anyhow::{Context, Result};
 use log::{debug, error, info};
@@ -36,13 +36,12 @@ impl ConnectionConfig {
             .map(|x| x == self.sni)
             .unwrap_or(false);
 
-        let mut stream = PeekableStream::new(stream);
+        // let mut stream = PeekableStream::new(stream);
 
         if sni_matched {
-            match self.trojan_acceptor.accept(&mut stream).await {
+            match self.trojan_acceptor.accept(stream).await {
                 Ok(out) => direct::accept(out).await?,
-                Err(e) => {
-                    debug!("Trojan accept error: {:?}. Redirect to fallback.", e);
+                Err(stream) => {
                     self.fallback_acceptor.accept(stream).await?;
                 }
             };
