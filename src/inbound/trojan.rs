@@ -34,7 +34,7 @@ impl TrojanAcceptor {
     {
         let mut stream = PeekableStream::new(stream);
         match self.inner_accept(&mut stream).await {
-            Ok(Cmd::Connect(addr)) => Ok(OutboundStream::Tcp(Box::new(stream), addr)),
+            Ok(Cmd::Connect(addr)) => Ok(OutboundStream::Tcp(Box::pin(stream), addr)),
             Ok(Cmd::UdpAssociate) => {
                 Ok(OutboundStream::Udp(Box::pin(Framed::new(stream, UdpCodec))))
             }

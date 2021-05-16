@@ -36,8 +36,6 @@ impl ConnectionConfig {
             .map(|x| x == self.sni)
             .unwrap_or(false);
 
-        // let mut stream = PeekableStream::new(stream);
-
         if sni_matched {
             match self.trojan_acceptor.accept(stream).await {
                 Ok(out) => direct::accept(out).await?,
