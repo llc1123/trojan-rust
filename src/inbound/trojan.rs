@@ -54,11 +54,11 @@ impl TrojanAcceptor {
         stream.peek_exact(&mut buf).await?;
 
         let password = String::from_utf8_lossy(&buf[0..56]);
-        if let Err(_) = hex::decode(password) {
+        if let Err(_) = hex::decode(password.as_ref()) {
             bail!("Not trojan request.")
         }
         if !self.auth_hub.auth(&password).await? {
-            bail!("Auth failed")
+            bail!("Auth failed: {}", &password)
         }
 
         let mut reader = Cursor::new(buf);
