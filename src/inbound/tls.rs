@@ -4,7 +4,7 @@ use std::{fs::File, io::BufReader, path::Path, sync::Arc};
 use tokio_rustls::{
     rustls::{
         internal::pemfile::{certs, pkcs8_private_keys, rsa_private_keys},
-        Certificate, NoClientAuth, PrivateKey, ServerConfig,
+        Certificate, KeyLogFile, NoClientAuth, PrivateKey, ServerConfig,
     },
     TlsAcceptor,
 };
@@ -41,6 +41,7 @@ pub fn from(config: &Tls) -> Result<TlsAcceptor> {
     server_config
         .set_single_cert(certs, keys.remove(0))
         .context("Invalid server config.")?;
+    server_config.key_log = Arc::new(KeyLogFile::new());
     let acceptor = TlsAcceptor::from(Arc::new(server_config));
 
     Ok(acceptor)
