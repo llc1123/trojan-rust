@@ -3,11 +3,13 @@ use std::io::{self, Cursor};
 use anyhow::{bail, Result};
 use bytes::{Buf, BufMut, BytesMut};
 use log::info;
-use socks5_protocol::{sync::FromIO, Address, Command, CommandRequest};
+use socks5_protocol::{sync::FromIO, Address};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
 const CMD: usize = 58;
+const ATYP: usize = 59;
+const DOMAIN_LEN: usize = 60;
 
 pub enum Cmd {
     Connect(String),
@@ -50,7 +52,7 @@ impl TrojanAcceptor {
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
-        let mut buf = vec![0u8; 56 + 2 + 2];
+        let mut buf = vec![0u8; 56 + 2 + 2 + 1];
         stream.peek_exact(&mut buf).await?;
 
         let password = String::from_utf8_lossy(&buf[0..56]);
@@ -60,20 +62,38 @@ impl TrojanAcceptor {
         if !self.auth_hub.auth(&password).await? {
             bail!("{}", &password)
         }
+        buf.resize(Self::calc_length(&buf)?, 0);
+        stream.peek_exact(&mut buf).await?;
 
+        let cmd = buf[CMD];
         let mut reader = Cursor::new(buf);
-        // skip password and CRLF
-        reader.advance(CMD);
 
-        let req = CommandRequest::read_from(&mut reader)?;
+        // read address
+        reader.advance(ATYP);
+        let address = Address::read_from(&mut reader)?;
         let end = reader.position() + 2;
         stream.drain(end as usize).await?;
 
-        match req.command {
-            Command::Connect => Ok(Cmd::Connect(req.address.to_string())),
-            Command::UdpAssociate => Ok(Cmd::UdpAssociate),
+        match cmd {
+            1 => Ok(Cmd::Connect(address.to_string())),
+            3 => Ok(Cmd::UdpAssociate),
             _ => bail!("Unknown command."),
         }
+    }
+
+    // length of head must be 61
+    fn calc_length(head: &[u8]) -> Result<usize> {
+        let len =
+            60 + match head[ATYP] {
+                // ipv4
+                1 => 8,
+                // domain
+                3 => 1 + head[DOMAIN_LEN] + 2,
+                // ipv6
+                4 => 18,
+                _ => bail!("Unsupported atyp"),
+            } + 2;
+        Ok(len as usize)
     }
 }
 
