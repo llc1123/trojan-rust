@@ -60,18 +60,15 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
     };
 
     let outbound = async {
-        loop {
-            match timeout(FULL_CONE_TIMEOUT, stream.try_next()).await {
-                Ok(Ok(Some((buf, addr)))) => {
+        while let Ok(Some(res)) = timeout(FULL_CONE_TIMEOUT, stream.next()).await {
+            match res {
+                Ok((buf, addr)) => {
                     if let Err(e) = udp.send_to(&buf, addr).await {
                         warn!("Unable to send to target {}: {}", &addr, e);
                     };
-                    continue;
                 }
-                Ok(Ok(None)) => continue,
-                Ok(Err(_)) => bail!("Broken pipe."),
-                Err(_) => break,
-            };
+                Err(_) => bail!("Connection reset by peer."),
+            }
         }
         Ok::<(), Error>(())
     };
