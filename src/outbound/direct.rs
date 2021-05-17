@@ -1,5 +1,5 @@
 use super::{BoxedUdpStream, OutboundStream};
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Error, Result};
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::{info, warn};
 use tokio::{
@@ -50,13 +50,13 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
         loop {
             let (size, addr) = match udp.recv_from(&mut buf).await {
                 Ok(r) => r,
-                // ignore recv_from error
-                Err(_e) => continue,
+                Err(_) => continue,
             };
             sink.send((buf[..size].to_vec(), addr))
                 .await
                 .map_err(|_| anyhow!("Broken pipe."))?;
         }
+        Ok::<(), Error>(())
     };
 
     let outbound = async {
@@ -73,13 +73,13 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
                 Err(_) => break,
             };
         }
-        Ok(())
+        Ok::<(), Error>(())
     };
 
-    (select! {
-        r = inbound => r,
-        r = outbound => r,
-    })?;
+    select! {
+        r = inbound => r?,
+        r = outbound => r?,
+    };
     info!("UDP tunnel closed.");
     Ok(())
 }
