@@ -2,7 +2,7 @@ use std::io::{self, Cursor};
 
 use anyhow::{bail, Result};
 use bytes::{Buf, BufMut, BytesMut};
-use log::info;
+use log::{info, warn};
 use socks5_protocol::{sync::FromIO, Address};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
@@ -42,7 +42,7 @@ impl TrojanAcceptor {
                 Ok(OutboundStream::Udp(Box::pin(Framed::new(stream, UdpCodec))))
             }
             Err(e) => {
-                info!("Redirect to fallback: {:?}", e);
+                warn!("Redirect to fallback: {:?}", e);
                 return Err(stream);
             }
         }
@@ -62,7 +62,7 @@ impl TrojanAcceptor {
         if !self.auth_hub.auth(&password).await? {
             bail!("{}", &password)
         }
-        
+
         info!("Trojan request accepted: {}", &password);
 
         buf.resize(Self::calc_length(&buf)?, 0);

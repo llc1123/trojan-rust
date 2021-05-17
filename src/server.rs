@@ -9,7 +9,7 @@ use crate::{
     utils::config::Config,
 };
 use anyhow::{Context, Result};
-use log::{debug, error, info};
+use log::{debug, error, info, warn};
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_rustls::{rustls::Session, TlsAcceptor};
@@ -44,7 +44,7 @@ impl ConnectionConfig {
                 }
             };
         } else {
-            info!("Redirect to fallback: SNI mismatch.");
+            warn!("Redirect to fallback: SNI mismatch.");
             self.fallback_acceptor.accept(stream).await?;
         };
 
