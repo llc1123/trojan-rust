@@ -3,7 +3,7 @@ use std::io;
 use super::{BoxedUdpStream, OutboundStream};
 use anyhow::{Context, Result};
 use futures::{SinkExt, StreamExt, TryStreamExt};
-use log::info;
+use log::{info, warn};
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::{TcpStream, UdpSocket},
@@ -27,7 +27,10 @@ async fn handle_tcp(mut s: impl AsyncRead + AsyncWrite + Unpin, addr: String) ->
     info!("Connecting to target {}", &addr);
     copy_bidirectional(&mut s, &mut outbound_stream)
         .await
-        .unwrap_or((0, 0));
+        .unwrap_or_else(|_| {
+            warn!("Connection reset by peer.");
+            (0, 0)
+        });
     info!("Connection to target {} has closed.", &addr);
 
     Ok(())
