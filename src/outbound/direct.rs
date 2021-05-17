@@ -56,6 +56,7 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
                 .await
                 .map_err(|_| anyhow!("Broken pipe."))?;
         }
+        #[allow(unreachable_code)]
         Ok::<(), Error>(())
     };
 

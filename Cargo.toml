@@ -1,9 +1,17 @@
+cargo-features = ["strip"]
+
 [package]
 name = "trojan-rust"
 version = "0.1.0"
 edition = "2018"
 authors = ["llc1123 <i@llc.moe>", "imspace <spacemeowx2@gmail.com>"]
 description = "Yet another trojan-gfw implementation in RRRRRRRRRRRust"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = 'abort'
+strip = "symbols"
 
 [dependencies]
 anyhow = "1.0.40"
