@@ -1,8 +1,7 @@
 use super::{BoxedUdpStream, OutboundStream};
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::{info, warn};
-use std::io;
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::{TcpStream, UdpSocket},
@@ -19,8 +18,8 @@ pub async fn accept(s: OutboundStream) -> Result<()> {
         OutboundStream::Udp(udp) => handle_udp(udp).await,
     };
 
-    Ok(r.unwrap_or_else(|op| {
-        warn!("{}", op);
+    Ok(r.unwrap_or_else(|err| {
+        warn!("{}", err);
     }))
 }
 
@@ -29,7 +28,7 @@ async fn handle_tcp(mut s: impl AsyncRead + AsyncWrite + Unpin, addr: String) ->
 
     let mut outbound_stream = TcpStream::connect(&addr)
         .await
-        .map_err(|op| anyhow!("Unable to connect to target {}: {}", &addr, op))?;
+        .map_err(|err| anyhow!("Unable to connect to target {}: {}", &addr, err))?;
 
     copy_bidirectional(&mut s, &mut outbound_stream)
         .await
@@ -56,15 +55,26 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
             };
             sink.send((buf[..size].to_vec(), addr))
                 .await
-                .map_err(|_| Into::<io::Error>::into(io::ErrorKind::BrokenPipe))?;
+                .map_err(|_| anyhow!("Broken pipe."))?;
         }
     };
+
     let outbound = async {
         loop {
-            while let Some((buf, addr)) = timeout(FULL_CONE_TIMEOUT, stream.try_next()).await?? {
-                udp.send_to(&buf, addr).await?;
-            }
+            match timeout(FULL_CONE_TIMEOUT, stream.try_next()).await {
+                Ok(Ok(Some((buf, addr)))) => {
+                    if let Err(e) = udp.send_to(&buf, addr).await {
+                        warn!("Unable to send to target {}: {}", &addr, e);
+                    };
+                    continue;
+                }
+                Ok(Ok(None)) => continue,
+                Ok(Err(_)) => bail!("Broken pipe."),
+                Err(_) => break,
+            };
         }
+        info!("UDP tunnel closed.");
+        Ok(())
     };
 
     select! {
