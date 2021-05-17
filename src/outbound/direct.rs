@@ -1,7 +1,7 @@
 use std::io;
 
 use super::{BoxedUdpStream, OutboundStream};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::{info, warn};
 use tokio::{
@@ -13,24 +13,27 @@ use tokio::{
 const UDP_BUFFER_SIZE: usize = 2048;
 
 pub async fn accept(s: OutboundStream) -> Result<()> {
-    match s {
+    let r = match s {
         OutboundStream::Tcp(tcp, addr) => handle_tcp(tcp, addr).await,
         OutboundStream::Udp(udp) => handle_udp(udp).await,
-    }
+    };
+
+    Ok(r.unwrap_or_else(|op| {
+        warn!("{}", op);
+    }))
 }
 
 async fn handle_tcp(mut s: impl AsyncRead + AsyncWrite + Unpin, addr: String) -> Result<()> {
+    info!("Connecting to target {}", &addr);
+
     let mut outbound_stream = TcpStream::connect(&addr)
         .await
-        .context(format!("Unable to connect to target {}", &addr))?;
+        .map_err(|op| anyhow!("Unable to connect to target {}: {}", &addr, op))?;
 
-    info!("Connecting to target {}", &addr);
     copy_bidirectional(&mut s, &mut outbound_stream)
         .await
-        .unwrap_or_else(|_| {
-            warn!("Connection reset by peer.");
-            (0, 0)
-        });
+        .map_err(|_| anyhow!("Connection reset by peer."))?;
+        
     info!("Connection to target {} has closed.", &addr);
 
     Ok(())
