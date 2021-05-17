@@ -73,12 +73,13 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
                 Err(_) => break,
             };
         }
-        info!("UDP tunnel closed.");
         Ok(())
     };
 
-    select! {
+    (select! {
         r = inbound => r,
         r = outbound => r,
-    }
+    })?;
+    info!("UDP tunnel closed.");
+    Ok(())
 }
