@@ -174,9 +174,6 @@ impl Decoder for UdpCodec {
 
         src.copy_to_slice(&mut buf);
 
-        Ok(Some((
-            buf,
-            address.to_socket_addr().map_err(|e| e.to_io_err())?,
-        )))
+        Ok(Some((buf, address.to_string())))
     }
 }
