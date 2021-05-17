@@ -6,12 +6,12 @@ use std::io;
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::{TcpStream, UdpSocket},
-    pin, select,
-    time::{sleep, Duration, Instant},
+    select,
+    time::{timeout, Duration},
 };
 
 const UDP_BUFFER_SIZE: usize = 2048;
-const FULL_CONE_TIMEOUT: u64 = 30;
+const FULL_CONE_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub async fn accept(s: OutboundStream) -> Result<()> {
     let r = match s {
@@ -48,40 +48,27 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
 
     let inbound = async {
         let mut buf = [0u8; UDP_BUFFER_SIZE];
-        let (size, addr) = udp.recv_from(&mut buf).await?;
-        sink.send((buf[..size].to_vec(), addr))
-            .await
-            .map_err(|_| Into::<io::Error>::into(io::ErrorKind::BrokenPipe))
-    };
-    pin!(inbound);
-
-    let outbound = async {
-        while let Some((buf, addr)) = stream.try_next().await? {
-            udp.send_to(&buf, addr).await?;
+        loop {
+            let (size, addr) = match udp.recv_from(&mut buf).await {
+                Ok(r) => r,
+                // ignore recv_from error
+                Err(_e) => continue,
+            };
+            sink.send((buf[..size].to_vec(), addr))
+                .await
+                .map_err(|_| Into::<io::Error>::into(io::ErrorKind::BrokenPipe))?;
         }
-        Ok::<(), anyhow::Error>(())
     };
-    pin!(outbound);
-
-    let timeout = sleep(Duration::from_secs(FULL_CONE_TIMEOUT));
-    pin!(timeout);
-
-    loop {
-        select! {
-            r = &mut inbound => {
-                timeout.as_mut().reset(Instant::now() + Duration::from_secs(FULL_CONE_TIMEOUT));
-                r.unwrap_or_else(|err| warn!("{}", err));
-            },
-            r = &mut outbound => {
-                timeout.as_mut().reset(Instant::now() + Duration::from_secs(FULL_CONE_TIMEOUT));
-                r.unwrap_or_else(|err| warn!("{}", err));
-            },
-            _ = &mut timeout => {
-                info!("UDP tunnel closed.");
-                break;
+    let outbound = async {
+        loop {
+            while let Some((buf, addr)) = timeout(FULL_CONE_TIMEOUT, stream.try_next()).await?? {
+                udp.send_to(&buf, addr).await?;
             }
-        };
-    }
+        }
+    };
 
-    Ok(())
+    select! {
+        r = inbound => r,
+        r = outbound => r,
+    }
 }
