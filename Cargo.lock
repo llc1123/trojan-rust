@@ -804,9 +804,9 @@ checksum = "fe0f37c9e8f3c5a4a66ad655a93c74daac4ad00c441533bf5c6e7990bb42604e"
 
 [[package]]
 name = "socks5-protocol"
-version = "0.3.3"
+version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd33328a5c3087b75da3ae0edcaba8a3b5022e7facdff4ffb4d7290f8ac7a908"
+checksum = "8316b9de7b221c3c99a19a961c5df90e8f27aad48c40d68cd4ce8bab5ac13b10"
 dependencies = [
  "thiserror",
  "tokio",

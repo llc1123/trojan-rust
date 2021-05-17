@@ -1,4 +1,7 @@
-use std::io::{self, Cursor};
+use std::{
+    io::{self, Cursor},
+    str::FromStr,
+};
 
 use anyhow::{bail, Result};
 use bytes::{Buf, BufMut, BytesMut};
@@ -120,7 +123,8 @@ impl Encoder<UdpPacket> for UdpCodec {
         dst.reserve(PREFIX_LENGTH + item.0.len());
         let mut writer = dst.writer();
 
-        Address::from(item.1)
+        Address::from_str(&item.1)
+            .map_err(|e| e.to_io_err())?
             .write_to(&mut writer)
             .map_err(|e| e.to_io_err())?;
         let dst = writer.into_inner();
