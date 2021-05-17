@@ -1,16 +1,17 @@
-use std::io;
-
 use super::{BoxedUdpStream, OutboundStream};
 use anyhow::{anyhow, Result};
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::{info, warn};
+use std::io;
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::{TcpStream, UdpSocket},
-    select,
+    pin, select,
+    time::{sleep, Duration, Instant},
 };
 
 const UDP_BUFFER_SIZE: usize = 2048;
+const FULL_CONE_TIMEOUT: u64 = 30;
 
 pub async fn accept(s: OutboundStream) -> Result<()> {
     let r = match s {
@@ -33,7 +34,7 @@ async fn handle_tcp(mut s: impl AsyncRead + AsyncWrite + Unpin, addr: String) ->
     copy_bidirectional(&mut s, &mut outbound_stream)
         .await
         .map_err(|_| anyhow!("Connection reset by peer."))?;
-        
+
     info!("Connection to target {} has closed.", &addr);
 
     Ok(())
@@ -47,23 +48,40 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
 
     let inbound = async {
         let mut buf = [0u8; UDP_BUFFER_SIZE];
-        loop {
-            let (size, addr) = udp.recv_from(&mut buf).await?;
-            sink.send((buf[..size].to_vec(), addr))
-                .await
-                .map_err(|_| Into::<io::Error>::into(io::ErrorKind::BrokenPipe))?;
-        }
+        let (size, addr) = udp.recv_from(&mut buf).await?;
+        sink.send((buf[..size].to_vec(), addr))
+            .await
+            .map_err(|_| Into::<io::Error>::into(io::ErrorKind::BrokenPipe))
     };
-    let outbound = async {
-        loop {
-            while let Some((buf, addr)) = stream.try_next().await? {
-                udp.send_to(&buf, addr).await?;
-            }
-        }
-    };
+    pin!(inbound);
 
-    select! {
-        r = inbound => r,
-        r = outbound => r,
+    let outbound = async {
+        while let Some((buf, addr)) = stream.try_next().await? {
+            udp.send_to(&buf, addr).await?;
+        }
+        Ok::<(), anyhow::Error>(())
+    };
+    pin!(outbound);
+
+    let timeout = sleep(Duration::from_secs(FULL_CONE_TIMEOUT));
+    pin!(timeout);
+
+    loop {
+        select! {
+            r = &mut inbound => {
+                timeout.as_mut().reset(Instant::now() + Duration::from_secs(FULL_CONE_TIMEOUT));
+                r.unwrap_or_else(|err| warn!("{}", err));
+            },
+            r = &mut outbound => {
+                timeout.as_mut().reset(Instant::now() + Duration::from_secs(FULL_CONE_TIMEOUT));
+                r.unwrap_or_else(|err| warn!("{}", err));
+            },
+            _ = &mut timeout => {
+                info!("UDP tunnel closed.");
+                break;
+            }
+        };
     }
+
+    Ok(())
 }
