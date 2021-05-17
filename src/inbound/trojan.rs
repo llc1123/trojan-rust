@@ -62,6 +62,9 @@ impl TrojanAcceptor {
         if !self.auth_hub.auth(&password).await? {
             bail!("{}", &password)
         }
+        
+        info!("Trojan request accepted: {}", &password);
+
         buf.resize(Self::calc_length(&buf)?, 0);
         stream.peek_exact(&mut buf).await?;
 
