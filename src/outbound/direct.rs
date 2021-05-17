@@ -52,7 +52,7 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
                 Ok(r) => r,
                 Err(_) => continue,
             };
-            sink.send((buf[..size].to_vec(), addr))
+            sink.send((buf[..size].to_vec(), addr.to_string()))
                 .await
                 .map_err(|_| anyhow!("Broken pipe."))?;
         }
@@ -63,7 +63,7 @@ async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
         while let Ok(Some(res)) = timeout(FULL_CONE_TIMEOUT, stream.next()).await {
             match res {
                 Ok((buf, addr)) => {
-                    if let Err(e) = udp.send_to(&buf, addr).await {
+                    if let Err(e) = udp.send_to(&buf, &addr).await {
                         warn!("Unable to send to target {}: {}", &addr, e);
                     };
                 }

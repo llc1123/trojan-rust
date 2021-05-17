@@ -1,10 +1,10 @@
 pub mod direct;
 
 use futures::{Sink, Stream};
-use std::{io, net::SocketAddr, pin::Pin};
+use std::{io, pin::Pin};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-pub type UdpPacket = (Vec<u8>, SocketAddr);
+pub type UdpPacket = (Vec<u8>, String);
 pub trait UdpStream:
     Stream<Item = io::Result<UdpPacket>> + Sink<UdpPacket, Error = io::Error> + Send
 {
