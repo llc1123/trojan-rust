@@ -6,7 +6,7 @@ use crate::{
         trojan::{self, TrojanAcceptor},
     },
     outbound::direct,
-    utils::config::Config,
+    utils::{config::Config, pushing_stream::PushingStream},
 };
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
@@ -35,6 +35,7 @@ impl ConnectionConfig {
             .get_sni_hostname()
             .map(|x| x == self.sni)
             .unwrap_or(false);
+        let stream = PushingStream::new(stream);
 
         if sni_matched {
             match self.trojan_acceptor.accept(stream).await {
