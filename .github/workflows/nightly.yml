@@ -4,17 +4,23 @@ name: nightly
 
 jobs:
   build-windows:
+    strategy:
+      matrix:
+        target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
+          target: ${{ matrix.target }}
+          override: true
       - uses: actions-rs/cargo@v1
         with:
+          use-cross: true
           toolchain: nightly
           command: build
-          args: --release
+          args: --release --target ${{ matrix.target }}
       - uses: actions/upload-artifact@v2
         with:
           name: build-windows
