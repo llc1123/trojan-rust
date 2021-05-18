@@ -6,7 +6,7 @@ jobs:
   build-windows:
     strategy:
       matrix:
-        target: [x86_64-pc-windows-msvc, aarch64-pc-windows-msvc]
+        target: [x86_64-pc-windows-msvc]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v2
@@ -17,7 +17,6 @@ jobs:
           override: true
       - uses: actions-rs/cargo@v1
         with:
-          use-cross: true
           toolchain: nightly
           command: build
           args: --release --target ${{ matrix.target }}
