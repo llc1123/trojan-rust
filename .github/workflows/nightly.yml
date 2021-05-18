@@ -23,7 +23,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: build-windows
-          path: ./target/release/trojan-rust.exe
+          path: ./target/${{ matrix.target }}/release/trojan-rust.exe
 
   build-linux:
     strategy:
