@@ -79,6 +79,9 @@ pub async fn start(config: Config) -> Result<()> {
 
     loop {
         let (stream, peer_addr) = listener.accept().await?;
+        stream
+            .set_nodelay(config.trojan.tcp_nodelay)
+            .context("Set TCP_NODELAY failed")?;
         let conn_cfg = conn_cfg.clone();
         tokio::spawn(async move {
             if let Err(err) = conn_cfg.accept(stream, peer_addr).await {

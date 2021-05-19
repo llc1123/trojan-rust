@@ -29,6 +29,8 @@ pub struct Trojan {
     pub password: Vec<String>,
     #[serde(default)]
     pub fallback: String,
+    #[serde(default)]
+    pub tcp_nodelay: bool,
 }
 
 fn default_listen() -> String {
