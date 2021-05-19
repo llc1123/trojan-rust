@@ -1,14 +1,17 @@
-# mode = "server" #default: "server"
+# mode = "server"
 
-[trojan]
-password = ["114514"] #default: []
-# fallback = "baidu.com:80" 
+## uses default values if not present
+# [trojan]
+# password = [] # optional
+## uses built-in if not present
+# fallback = "baidu.com:80" # optional
 
 [tls]
-listen = "127.0.0.1:8888" #default: "0.0.0.0:443"
-sni = "dev.llc.moe"
-cert = "fullchain.pem"
-key = "privkey.pem"
+# listen = "0.0.0.0:443" # optional
+sni = "example.com" # required
+cert = "fullchain.pem" # required
+key = "privkey.pem" # required
 
-# [redis]  #default: None
-# server = "localhost:5678"   #default: "localhost:5678"
+## not using redis if not present
+# [redis]
+# server = "localhost:5678" # optional
