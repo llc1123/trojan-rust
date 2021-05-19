@@ -35,4 +35,5 @@ sha2 = "0.9.5"
 hex = "0.4.3"
 redis = { version = "0.20.0", features = ["tokio-comp"] }
 tokio-openssl = "0.6.1"
-openssl = { version = "0.10.34", features = ["vendored"] }
+# openssl = { version = "0.10.34", features = ["vendored"] }
+openssl = { version = "0.10.34" }
