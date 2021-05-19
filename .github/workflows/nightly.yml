@@ -12,9 +12,8 @@ jobs:
       - uses: actions/checkout@v2
       - uses: lukka/run-vcpkg@v7
         with:
-          vcpkgArguments: openssl
-          vcpkgTriplet: x64-windows-static-md
-          vcpkgDirectory: '${{ github.workspace }}/vcpkg'
+          setupOnly: true
+      - run: $VCPKG_ROOT/vcpkg install openssl:x64-windows-static-md
       - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
@@ -36,7 +35,7 @@ jobs:
         target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
     runs-on: ubuntu-latest
     steps:
-      - run: sudo apt-get install openssl-dev
+      - run: sudo apt-get install libssl-dev
       - uses: actions/checkout@v2
       - uses: actions-rs/toolchain@v1
         with:
