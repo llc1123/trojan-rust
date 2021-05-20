@@ -10,13 +10,13 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
-use openssl::ssl::SslAcceptor;
-use std::{net::SocketAddr, sync::Arc};
+use openssl::ssl::{NameType, Ssl, SslContext};
+use std::{net::SocketAddr, pin::Pin, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_openssl::SslStream;
 
 struct ConnectionConfig {
-    tls_acceptor: SslAcceptor,
+    ssl_context: SslContext,
     sni: String,
     fallback_acceptor: FallbackAcceptor,
     trojan_acceptor: TrojanAcceptor,
@@ -25,17 +25,17 @@ struct ConnectionConfig {
 impl ConnectionConfig {
     async fn accept(&self, stream: TcpStream, peer_addr: SocketAddr) -> Result<()> {
         info!("Inbound connection from {}", peer_addr);
-        let stream = self.tls_acceptor.accept(stream).await?;
-        let (_, session) = stream.get_ref();
-        debug!(
-            "ALPN: {:?}",
-            session.get_alpn_protocol().unwrap_or_default()
-        );
-        debug!("SNI: {:?}", session.get_sni_hostname().unwrap_or_default());
-        let sni_matched = session
-            .get_sni_hostname()
-            .map(|x| x == self.sni)
-            .unwrap_or(false);
+        let mut stream = SslStream::new(Ssl::new(&self.ssl_context)?, stream)?;
+        Pin::new(&mut stream)
+            .accept()
+            .await
+            .context("Invalid TLS connection.")?;
+        let servername = stream
+            .ssl()
+            .servername(NameType::HOST_NAME)
+            .unwrap_or_default();
+        debug!("SNI: {:?}", &servername);
+        let sni_matched = servername == self.sni;
         let stream = PushingStream::new(stream);
 
         if sni_matched {
@@ -63,7 +63,7 @@ pub async fn start(config: Config) -> Result<()> {
 
     let auth_hub = AuthHub::new(&config).await?;
     // let tls_acceptor = tls::from(&config.tls).context("Failed to setup TLS server.")?;
-    let tls_acceptor = tls_openssl::new(&config.tls)?;
+    let ssl_context = tls_openssl::new(&config.tls)?;
     let fallback_acceptor = FallbackAcceptor::new(config.trojan.fallback)
         .await
         .context("Failed to setup fallback server.")?;
@@ -71,7 +71,7 @@ pub async fn start(config: Config) -> Result<()> {
     let trojan_acceptor = trojan::TrojanAcceptor::new(auth_hub)?;
 
     let conn_cfg = Arc::new(ConnectionConfig {
-        tls_acceptor,
+        ssl_context,
         sni: config.tls.sni,
         fallback_acceptor,
         trojan_acceptor,
