@@ -1,12 +1,11 @@
-use std::{
-    io::{self, Cursor},
-    str::FromStr,
-};
-
 use anyhow::{bail, Result};
 use bytes::{Buf, BufMut, BytesMut};
 use log::{info, warn};
 use socks5_protocol::{sync::FromIO, Address};
+use std::{
+    io::{self, Cursor},
+    str::FromStr,
+};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 

@@ -1,12 +1,8 @@
 use crate::{
     auth::AuthHub,
-    inbound::{
-        fallback::FallbackAcceptor,
-        tls,
-        trojan::{self, TrojanAcceptor},
-    },
+    inbound::{fallback::FallbackAcceptor, tls, trojan::TrojanAcceptor},
     outbound::direct,
-    utils::{config::Config, pushing_stream::PushingStream},
+    utils::config::Config,
 };
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
@@ -36,7 +32,6 @@ impl ConnectionConfig {
             .unwrap_or_default();
         debug!("SNI: {:?}", &servername);
         let sni_matched = servername == self.sni;
-        let stream = PushingStream::new(stream);
 
         if sni_matched {
             match self.trojan_acceptor.accept(stream).await {
@@ -62,13 +57,12 @@ pub async fn start(config: Config) -> Result<()> {
         .context(format!("Failed to bind address {}", &config.tls.listen))?;
 
     let auth_hub = AuthHub::new(&config).await?;
-    // let tls_acceptor = tls::from(&config.tls).context("Failed to setup TLS server.")?;
-    let ssl_context = tls::new(&config.tls)?;
+    let ssl_context = tls::new(&config.tls).context("Failed to setup TLS server.")?;
     let fallback_acceptor = FallbackAcceptor::new(config.trojan.fallback)
         .await
         .context("Failed to setup fallback server.")?;
 
-    let trojan_acceptor = trojan::TrojanAcceptor::new(auth_hub)?;
+    let trojan_acceptor = TrojanAcceptor::new(auth_hub)?;
 
     let conn_cfg = Arc::new(ConnectionConfig {
         ssl_context,

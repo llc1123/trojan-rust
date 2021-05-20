@@ -1,10 +1,9 @@
+use futures::ready;
 use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
 };
-
-use futures::ready;
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 pub struct HookStream<S> {
