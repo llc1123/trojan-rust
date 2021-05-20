@@ -2,7 +2,7 @@ use crate::{
     auth::AuthHub,
     inbound::{
         fallback::FallbackAcceptor,
-        tls,
+        tls_openssl,
         trojan::{self, TrojanAcceptor},
     },
     outbound::direct,
@@ -10,12 +10,13 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
+use openssl::ssl::SslAcceptor;
 use std::{net::SocketAddr, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
-use tokio_rustls::{rustls::Session, TlsAcceptor};
+use tokio_openssl::SslStream;
 
 struct ConnectionConfig {
-    tls_acceptor: TlsAcceptor,
+    tls_acceptor: SslAcceptor,
     sni: String,
     fallback_acceptor: FallbackAcceptor,
     trojan_acceptor: TrojanAcceptor,
@@ -61,7 +62,8 @@ pub async fn start(config: Config) -> Result<()> {
         .context(format!("Failed to bind address {}", &config.tls.listen))?;
 
     let auth_hub = AuthHub::new(&config).await?;
-    let tls_acceptor = tls::from(&config.tls).context("Failed to setup TLS server.")?;
+    // let tls_acceptor = tls::from(&config.tls).context("Failed to setup TLS server.")?;
+    let tls_acceptor = tls_openssl::new(&config.tls)?;
     let fallback_acceptor = FallbackAcceptor::new(config.trojan.fallback)
         .await
         .context("Failed to setup fallback server.")?;
@@ -80,7 +82,7 @@ pub async fn start(config: Config) -> Result<()> {
     loop {
         let (stream, peer_addr) = listener.accept().await?;
         stream
-            .set_nodelay(config.trojan.tcp_nodelay)
+            .set_nodelay(config.tls.tcp_nodelay)
             .context("Set TCP_NODELAY failed")?;
         let conn_cfg = conn_cfg.clone();
         tokio::spawn(async move {
