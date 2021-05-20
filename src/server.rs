@@ -2,7 +2,7 @@ use crate::{
     auth::AuthHub,
     inbound::{
         fallback::FallbackAcceptor,
-        tls_openssl,
+        tls,
         trojan::{self, TrojanAcceptor},
     },
     outbound::direct,
@@ -63,7 +63,7 @@ pub async fn start(config: Config) -> Result<()> {
 
     let auth_hub = AuthHub::new(&config).await?;
     // let tls_acceptor = tls::from(&config.tls).context("Failed to setup TLS server.")?;
-    let ssl_context = tls_openssl::new(&config.tls)?;
+    let ssl_context = tls::new(&config.tls)?;
     let fallback_acceptor = FallbackAcceptor::new(config.trojan.fallback)
         .await
         .context("Failed to setup fallback server.")?;
