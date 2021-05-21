@@ -12,39 +12,21 @@ pub struct SslContext {
 
 impl SslContext {
     pub fn new(config: &Tls) -> Result<SslContext> {
-        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+        let (tx, rx) = mpsc::unbounded_channel::<String>();
 
         let keylog_callback = move |_: &ssl::SslRef, s: &str| {
             trace!("Keylog: {}", &s);
             if tx.is_closed() {
                 return;
             }
-            tx.send(String::from(s)).unwrap();
+            tx.send(String::from(s)).ok();
         };
 
-        let keylogger = async move {
-            let path = env::var("SSLKEYLOGFILE").unwrap_or_default();
-            if path == "" {
-                return Ok(());
+        tokio::spawn(async move {
+            if let Err(e) = keylogger(rx).await {
+                log::error!("keylogger error: {:?}", e);
             }
-            let path = Path::new(&path);
-            let mut keylogfile = OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open(path)
-                .await
-                .context("Cannot open keylog file.")?;
-            loop {
-                if let Some(keylog) = rx.recv().await {
-                    keylogfile.write_all(keylog.as_bytes()).await?;
-                    keylogfile.write_all(b"\n").await?;
-                } else {
-                    break;
-                }
-            }
-            Ok::<(), anyhow::Error>(())
-        };
-        tokio::spawn(keylogger);
+        });
 
         let mut acceptor = ssl::SslAcceptor::mozilla_intermediate_v5(ssl::SslMethod::tls_server())?;
         acceptor.set_verify(ssl::SslVerifyMode::NONE);
@@ -65,4 +47,28 @@ impl Deref for SslContext {
     fn deref(&self) -> &Self::Target {
         &self.inner
     }
+}
+
+async fn keylogger(mut rx: mpsc::UnboundedReceiver<String>) -> Result<()> {
+    let path = env::var("SSLKEYLOGFILE").unwrap_or_default();
+    if path == "" {
+        return Ok(());
+    }
+    let path = Path::new(&path);
+    let mut keylogfile = OpenOptions::new()
+        .append(true)
+        .create(true)
+        .open(path)
+        .await
+        .context("Cannot open keylog file.")?;
+    loop {
+        if let Some(keylog) = rx.recv().await {
+            keylogfile.write_all(keylog.as_bytes()).await?;
+            keylogfile.write_all(b"\n").await?;
+        } else {
+            break;
+        }
+    }
+
+    Ok(())
 }
