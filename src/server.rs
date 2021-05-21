@@ -1,12 +1,12 @@
 use crate::{
     auth::AuthHub,
-    inbound::{fallback::FallbackAcceptor, tls, trojan::TrojanAcceptor},
+    inbound::{fallback::FallbackAcceptor, tls::SslContext, trojan::TrojanAcceptor},
     outbound::direct,
     utils::config::Config,
 };
 use anyhow::{Context, Result};
 use log::{debug, error, info, warn};
-use openssl::ssl::{NameType, Ssl, SslContext};
+use openssl::ssl::{NameType, Ssl};
 use std::{net::SocketAddr, pin::Pin, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_openssl::SslStream;
@@ -57,7 +57,7 @@ pub async fn start(config: Config) -> Result<()> {
         .context(format!("Failed to bind address {}", &config.tls.listen))?;
 
     let auth_hub = AuthHub::new(&config).await?;
-    let ssl_context = tls::TlsContext::new(&config.tls).context("Failed to setup TLS server.")?;
+    let ssl_context = SslContext::new(&config.tls).context("Failed to setup TLS server.")?;
     let fallback_acceptor = FallbackAcceptor::new(config.trojan.fallback)
         .await
         .context("Failed to setup fallback server.")?;
@@ -65,7 +65,7 @@ pub async fn start(config: Config) -> Result<()> {
     let trojan_acceptor = TrojanAcceptor::new(auth_hub)?;
 
     let conn_cfg = Arc::new(ConnectionConfig {
-        ssl_context: ssl_context.inner,
+        ssl_context,
         sni: config.tls.sni,
         fallback_acceptor,
         trojan_acceptor,

@@ -1,24 +1,66 @@
 use crate::utils::config::Tls;
-use anyhow::Result;
-use openssl::ssl::{SslAcceptor, SslContext, SslFiletype, SslMethod, SslRef, SslVerifyMode};
+use anyhow::{Context, Result};
+use log::trace;
+use openssl::ssl;
+use std::{env, ops::Deref, path::Path};
+use tokio::io::AsyncWriteExt;
+use tokio::{fs::OpenOptions, sync::mpsc};
 
-fn keylog_callback(_ssl: &SslRef, _s: &str) {}
-
-pub struct TlsContext {
-    pub inner: SslContext,
+pub struct SslContext {
+    inner: ssl::SslContext,
 }
 
-impl TlsContext {
-    pub fn new(config: &Tls) -> Result<TlsContext> {
-        let mut acceptor = SslAcceptor::mozilla_intermediate_v5(SslMethod::tls_server())?;
-        acceptor.set_verify(SslVerifyMode::NONE);
+impl SslContext {
+    pub fn new(config: &Tls) -> Result<SslContext> {
+        let (tx, mut rx) = mpsc::unbounded_channel::<String>();
+
+        let keylog_callback = move |_: &ssl::SslRef, s: &str| {
+            trace!("Keylog: {}", &s);
+            if tx.is_closed() {
+                return;
+            }
+            tx.send(String::from(s)).unwrap();
+        };
+
+        let keylogger = async {
+            let path = env::var("SSLKEYLOGFILE").unwrap_or_default();
+            if path == "" {
+                return Ok(());
+            }
+            let path = Path::new(&path);
+            let mut keylogfile = OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(path)
+                .await
+                .context("Cannot open keylog file.")?;
+            loop {
+                if let Some(keylog) = rx.recv().await {
+                    keylogfile.write(keylog.as_bytes()).await?;
+                } else {
+                    break;
+                }
+            }
+            Ok::<(), anyhow::Error>(())
+        };
+
+        let mut acceptor = ssl::SslAcceptor::mozilla_intermediate_v5(ssl::SslMethod::tls_server())?;
+        acceptor.set_verify(ssl::SslVerifyMode::NONE);
         acceptor.set_certificate_chain_file(&config.cert)?;
-        acceptor.set_private_key_file(&config.key, SslFiletype::PEM)?;
+        acceptor.set_private_key_file(&config.key, ssl::SslFiletype::PEM)?;
         acceptor.check_private_key()?;
         acceptor.set_keylog_callback(keylog_callback);
 
-        Ok(TlsContext {
+        Ok(SslContext {
             inner: acceptor.build().into_context(),
         })
+    }
+}
+
+impl Deref for SslContext {
+    type Target = ssl::SslContext;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
     }
 }
