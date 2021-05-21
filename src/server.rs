@@ -57,7 +57,7 @@ pub async fn start(config: Config) -> Result<()> {
         .context(format!("Failed to bind address {}", &config.tls.listen))?;
 
     let auth_hub = AuthHub::new(&config).await?;
-    let ssl_context = tls::new(&config.tls).context("Failed to setup TLS server.")?;
+    let ssl_context = tls::TlsContext::new(&config.tls).context("Failed to setup TLS server.")?;
     let fallback_acceptor = FallbackAcceptor::new(config.trojan.fallback)
         .await
         .context("Failed to setup fallback server.")?;
@@ -65,7 +65,7 @@ pub async fn start(config: Config) -> Result<()> {
     let trojan_acceptor = TrojanAcceptor::new(auth_hub)?;
 
     let conn_cfg = Arc::new(ConnectionConfig {
-        ssl_context,
+        ssl_context: ssl_context.inner,
         sni: config.tls.sni,
         fallback_acceptor,
         trojan_acceptor,
