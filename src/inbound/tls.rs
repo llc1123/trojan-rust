@@ -22,7 +22,7 @@ impl SslContext {
             tx.send(String::from(s)).unwrap();
         };
 
-        let keylogger = async {
+        let keylogger = async move {
             let path = env::var("SSLKEYLOGFILE").unwrap_or_default();
             if path == "" {
                 return Ok(());
@@ -36,13 +36,15 @@ impl SslContext {
                 .context("Cannot open keylog file.")?;
             loop {
                 if let Some(keylog) = rx.recv().await {
-                    keylogfile.write(keylog.as_bytes()).await?;
+                    keylogfile.write_all(keylog.as_bytes()).await?;
+                    keylogfile.write_all(b"\n").await?;
                 } else {
                     break;
                 }
             }
             Ok::<(), anyhow::Error>(())
         };
+        tokio::spawn(keylogger);
 
         let mut acceptor = ssl::SslAcceptor::mozilla_intermediate_v5(ssl::SslMethod::tls_server())?;
         acceptor.set_verify(ssl::SslVerifyMode::NONE);
