@@ -1,5 +1,6 @@
 use crate::utils::config::Tls;
 use anyhow::{Context, Result};
+use futures::TryFutureExt;
 use log::trace;
 use openssl::ssl;
 use std::{env, ops::Deref, path::Path};
@@ -22,11 +23,7 @@ impl SslContext {
             tx.send(String::from(s)).ok();
         };
 
-        tokio::spawn(async move {
-            if let Err(e) = keylogger(rx).await {
-                log::error!("keylogger error: {:?}", e);
-            }
-        });
+        tokio::spawn(keylogger(rx).inspect_err(|e| log::error!("keylogger error: {:?}", e)));
 
         let mut acceptor = ssl::SslAcceptor::mozilla_intermediate_v5(ssl::SslMethod::tls_server())?;
         acceptor.set_verify(ssl::SslVerifyMode::NONE);
