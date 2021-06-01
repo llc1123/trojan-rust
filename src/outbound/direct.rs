@@ -1,10 +1,7 @@
-use std::net::SocketAddr;
-
 use super::{BoxedUdpStream, OutboundStream};
 use anyhow::{anyhow, bail, Error, Result};
 use futures::{SinkExt, StreamExt};
 use log::{info, warn};
-use socket2::{Domain, Protocol, SockAddr, Socket, Type};
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::{TcpStream, UdpSocket},
@@ -44,14 +41,8 @@ async fn handle_tcp(mut s: impl AsyncRead + AsyncWrite + Unpin, addr: String) ->
 
 async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
     let (mut sink, mut stream) = s.split();
-    
-    // let udp = UdpSocket::bind("0.0.0.0:0").await?;
-    let udp = Socket::new(Domain::IPV6, Type::DGRAM, Some(Protocol::UDP))?;
-    udp.set_only_v6(false)?;
-    udp.bind(&SockAddr::from("[::]:0".parse::<SocketAddr>()?))?;
-    udp.listen(128)?;
+    let udp = UdpSocket::bind("0.0.0.0:0").await?;
 
-    let udp = UdpSocket::from_std(udp.into())?;
     info!("UDP tunnel {} created.", &udp.local_addr()?);
 
     let inbound = async {
