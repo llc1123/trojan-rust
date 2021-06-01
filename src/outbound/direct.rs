@@ -41,7 +41,7 @@ async fn handle_tcp(mut s: impl AsyncRead + AsyncWrite + Unpin, addr: String) ->
 
 async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
     let (mut sink, mut stream) = s.split();
-    let udp = UdpSocket::bind("[::]:0").await?;
+    let udp = UdpSocket::bind("0.0.0.0:0").await?;
 
     info!("UDP tunnel {} created.", &udp.local_addr()?);
 
