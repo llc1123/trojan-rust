@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 
 #[async_trait]
-pub trait Auth {
+pub trait Auth: Send + Sync + Unpin {
     async fn auth(&self, password: &str) -> Result<bool>;
     async fn stat(&self, password: &str, upload: u64, download: u64) -> Result<()>;
 }

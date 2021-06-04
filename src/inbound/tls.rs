@@ -1,18 +1,24 @@
-use crate::utils::config::Tls;
+use crate::{common::AsyncStream, utils::config::Tls};
 use anyhow::{Context, Result};
 use futures::TryFutureExt;
-use log::trace;
-use openssl::ssl;
-use std::{env, ops::Deref, path::Path};
-use tokio::io::AsyncWriteExt;
-use tokio::{fs::OpenOptions, sync::mpsc};
+use log::{debug, trace};
+use openssl::ssl::{self, NameType, Ssl};
+use std::{env, ops::Deref, path::Path, pin::Pin};
+use tokio::{fs::OpenOptions, io::AsyncWriteExt, sync::mpsc};
+use tokio_openssl::SslStream;
 
-pub struct SslContext {
+pub struct TlsContext {
     inner: ssl::SslContext,
+    sni: String,
 }
 
-impl SslContext {
-    pub fn new(config: &Tls) -> Result<SslContext> {
+pub struct TlsAccept<S> {
+    pub sni_matched: bool,
+    pub stream: SslStream<S>,
+}
+
+impl TlsContext {
+    pub fn new(config: &Tls) -> Result<TlsContext> {
         let (tx, rx) = mpsc::unbounded_channel::<String>();
 
         let keylog_callback = move |_: &ssl::SslRef, s: &str| {
@@ -32,13 +38,31 @@ impl SslContext {
         acceptor.check_private_key()?;
         acceptor.set_keylog_callback(keylog_callback);
 
-        Ok(SslContext {
+        Ok(TlsContext {
             inner: acceptor.build().into_context(),
+            sni: config.sni.clone(),
+        })
+    }
+    pub async fn accept<S: AsyncStream + Unpin>(&self, stream: S) -> Result<TlsAccept<S>> {
+        let mut stream = SslStream::new(Ssl::new(&self.inner)?, stream)?;
+        Pin::new(&mut stream)
+            .accept()
+            .await
+            .context("Invalid TLS connection.")?;
+        let servername = stream
+            .ssl()
+            .servername(NameType::HOST_NAME)
+            .unwrap_or_default();
+        debug!("SNI: {:?}", &servername);
+
+        Ok(TlsAccept {
+            sni_matched: servername == self.sni,
+            stream,
         })
     }
 }
 
-impl Deref for SslContext {
+impl Deref for TlsContext {
     type Target = ssl::SslContext;
 
     fn deref(&self) -> &Self::Target {
