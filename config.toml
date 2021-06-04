@@ -15,4 +15,4 @@ key = "privkey.pem" # required
 
 ## doesn't use redis if not present
 # [redis]
-# server = "localhost:5678" # optional
+# server = "127.0.0.1:6379" # optional

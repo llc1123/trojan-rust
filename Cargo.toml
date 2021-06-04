@@ -22,12 +22,13 @@ log = "0.4.14"
 serde = "1.0.125"
 serde_derive = "1.0.125"
 tokio = { version = "1.5.0", features = ["full"] }
+tokio-stream = { version = "0.1.6", features = ["sync"] }
 toml = "0.5.8"
 hyper = { version = "0.14.7", features = ["http1", "server"] }
 http = "0.2"
 futures = "0.3.14"
 socks5-protocol = "0.3.4"
-tokio-util = { version = "0.6.6", features = ["codec"] }
+tokio-util = { version = "0.6.6", features = ["codec", "net"] }
 bytes = "1.0.1"
 async-trait = "0.1.50"
 sha2 = "0.9.5"

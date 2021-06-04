@@ -1,83 +1,79 @@
-use super::{BoxedUdpStream, OutboundStream};
-use anyhow::{anyhow, bail, Error, Result};
+use std::io::{self, ErrorKind};
+
+use crate::common::UdpPacket;
+
+use super::{BoxedUdpStream, Outbound};
+use anyhow::Result;
+use async_trait::async_trait;
+use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
-use log::{info, warn};
-use tokio::{
-    io::{copy_bidirectional, AsyncRead, AsyncWrite},
-    net::{TcpStream, UdpSocket},
-    select,
-    time::{timeout, Duration},
+use tokio::net::{lookup_host, TcpStream, UdpSocket};
+use tokio_util::{
+    codec::{Decoder, Encoder},
+    udp::UdpFramed,
 };
 
-const UDP_BUFFER_SIZE: usize = 2048;
-const FULL_CONE_TIMEOUT: Duration = Duration::from_secs(30);
+pub struct BytesCodec(());
 
-pub async fn accept(s: OutboundStream) -> Result<()> {
-    let r = match s {
-        OutboundStream::Tcp(tcp, addr) => handle_tcp(tcp, addr).await,
-        OutboundStream::Udp(udp) => handle_udp(udp).await,
-    };
-
-    Ok(r.unwrap_or_else(|err| {
-        warn!("{}", err);
-    }))
+impl BytesCodec {
+    /// Creates a new `BytesCodec` for shipping around raw bytes.
+    pub fn new() -> BytesCodec {
+        BytesCodec(())
+    }
 }
 
-async fn handle_tcp(mut s: impl AsyncRead + AsyncWrite + Unpin, addr: String) -> Result<()> {
-    info!("Connecting to target {}", &addr);
+impl Decoder for BytesCodec {
+    type Item = Bytes;
+    type Error = io::Error;
 
-    let mut outbound_stream = TcpStream::connect(&addr)
-        .await
-        .map_err(|err| anyhow!("Unable to connect to target {}: {}", &addr, err))?;
-
-    copy_bidirectional(&mut s, &mut outbound_stream)
-        .await
-        .map_err(|_| anyhow!("Connection reset by peer."))?;
-
-    info!("Connection to target {} has closed.", &addr);
-
-    Ok(())
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
+        if !buf.is_empty() {
+            let len = buf.len();
+            Ok(Some(buf.split_to(len).freeze()))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
-async fn handle_udp(s: BoxedUdpStream) -> Result<()> {
-    let (mut sink, mut stream) = s.split();
-    let udp = UdpSocket::bind("0.0.0.0:0").await?;
+impl Encoder<Bytes> for BytesCodec {
+    type Error = io::Error;
 
-    info!("UDP tunnel {} created.", &udp.local_addr()?);
+    fn encode(&mut self, data: Bytes, buf: &mut BytesMut) -> Result<(), io::Error> {
+        buf.reserve(data.len());
+        buf.put(data);
+        Ok(())
+    }
+}
 
-    let inbound = async {
-        let mut buf = [0u8; UDP_BUFFER_SIZE];
-        loop {
-            let (size, addr) = match udp.recv_from(&mut buf).await {
-                Ok(r) => r,
-                Err(_) => continue,
-            };
-            sink.send((buf[..size].to_vec(), addr.to_string()))
-                .await
-                .map_err(|_| anyhow!("Broken pipe."))?;
-        }
-        #[allow(unreachable_code)]
-        Ok::<(), Error>(())
-    };
+pub struct DirectOutbound;
 
-    let outbound = async {
-        while let Ok(Some(res)) = timeout(FULL_CONE_TIMEOUT, stream.next()).await {
-            match res {
-                Ok((buf, addr)) => {
-                    if let Err(e) = udp.send_to(&buf, &addr).await {
-                        warn!("Unable to send to target {}: {}", &addr, e);
-                    };
-                }
-                Err(_) => bail!("Connection reset by peer."),
-            }
-        }
-        Ok::<(), Error>(())
-    };
+impl DirectOutbound {
+    pub fn new() -> Self {
+        DirectOutbound
+    }
+}
 
-    select! {
-        r = inbound => r?,
-        r = outbound => r?,
-    };
-    info!("UDP tunnel closed.");
-    Ok(())
+#[async_trait]
+impl Outbound for DirectOutbound {
+    type TcpStream = TcpStream;
+    type UdpSocket = BoxedUdpStream;
+
+    async fn tcp_connect(&self, address: &str) -> io::Result<Self::TcpStream> {
+        TcpStream::connect(address).await
+    }
+
+    async fn udp_bind(&self, address: &str) -> io::Result<Self::UdpSocket> {
+        let udp = UdpSocket::bind(address).await?;
+        let stream = UdpFramed::new(udp, BytesCodec::new())
+            .map(|r| r.map(|(a, b)| (a, b.to_string())))
+            .with(|(buf, addr): UdpPacket| async move {
+                let addr = lookup_host(addr)
+                    .await?
+                    .next()
+                    .ok_or(io::Error::from(ErrorKind::AddrNotAvailable))?;
+                Ok((buf, addr)) as io::Result<_>
+            });
+        Ok(Box::pin(stream))
+    }
 }

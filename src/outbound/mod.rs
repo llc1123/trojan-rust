@@ -1,25 +1,14 @@
 pub mod direct;
 
-use futures::{Sink, Stream};
-use std::{io, pin::Pin};
-use tokio::io::{AsyncRead, AsyncWrite};
+use crate::common::{AsyncStream, BoxedUdpStream, UdpStream};
+use async_trait::async_trait;
+use std::io;
 
-pub type UdpPacket = (Vec<u8>, String);
-pub trait UdpStream:
-    Stream<Item = io::Result<UdpPacket>> + Sink<UdpPacket, Error = io::Error> + Send
-{
-}
-impl<T> UdpStream for T where
-    T: Stream<Item = io::Result<UdpPacket>> + Sink<UdpPacket, Error = io::Error> + Send
-{
-}
-pub type BoxedUdpStream = Pin<Box<dyn UdpStream + 'static>>;
+#[async_trait]
+pub trait Outbound: Send + Sync {
+    type TcpStream: AsyncStream + 'static;
+    type UdpSocket: UdpStream + 'static;
 
-pub trait AsyncStream: AsyncRead + AsyncWrite + Send {}
-impl<T: AsyncRead + AsyncWrite + Send> AsyncStream for T {}
-pub type BoxedStream = Pin<Box<dyn AsyncStream + 'static>>;
-
-pub enum OutboundStream {
-    Tcp(BoxedStream, String),
-    Udp(BoxedUdpStream),
+    async fn tcp_connect(&self, address: &str) -> io::Result<Self::TcpStream>;
+    async fn udp_bind(&self, address: &str) -> io::Result<Self::UdpSocket>;
 }

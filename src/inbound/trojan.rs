@@ -1,13 +1,26 @@
-use anyhow::{bail, Result};
+use super::{tls::TlsContext, Inbound, InboundAccept, InboundRequest};
+use crate::{
+    auth::Auth,
+    common::{AsyncStream, BoxedStream, BoxedUdpStream, UdpPacket},
+    inbound::tls::TlsAccept,
+    utils::{config::Trojan, peekable_stream::PeekableStream},
+};
+use anyhow::{bail, Context, Result};
+use async_trait::async_trait;
 use bytes::{Buf, BufMut, BytesMut};
+use fallback::FallbackAcceptor;
 use log::{info, warn};
 use socks5_protocol::{sync::FromIO, Address};
 use std::{
     io::{self, Cursor},
+    net::SocketAddr,
     str::FromStr,
+    sync::Arc,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{Decoder, Encoder, Framed};
+
+mod fallback;
 
 const CMD: usize = 58;
 const ATYP: usize = 59;
@@ -18,31 +31,96 @@ pub enum Cmd {
     UdpAssociate,
 }
 
-use crate::{
-    auth::{Auth, AuthHub},
-    outbound::{OutboundStream, UdpPacket},
-    utils::peekable_stream::PeekableStream,
-};
-
-pub struct TrojanAcceptor {
-    auth_hub: AuthHub,
+pub struct TrojanInbound {
+    auth_hub: Arc<dyn Auth>,
+    tls_context: TlsContext,
+    fallback_acceptor: FallbackAcceptor,
 }
 
-impl TrojanAcceptor {
-    pub fn new(auth_hub: AuthHub) -> Result<TrojanAcceptor> {
-        Ok(TrojanAcceptor { auth_hub })
+fn map_err(e: anyhow::Error) -> io::Error {
+    io::Error::new(io::ErrorKind::Other, e)
+}
+
+#[async_trait]
+impl Inbound for TrojanInbound {
+    type Metadata = String;
+    type TcpStream = BoxedStream;
+    type UdpSocket = BoxedUdpStream;
+
+    async fn accept<AcceptedStream>(
+        &self,
+        stream: AcceptedStream,
+        _addr: SocketAddr,
+    ) -> io::Result<Option<InboundAccept<Self::Metadata, Self::TcpStream, Self::UdpSocket>>>
+    where
+        AcceptedStream: AsyncStream + Unpin + 'static,
+    {
+        let TlsAccept {
+            stream,
+            sni_matched,
+        } = self.tls_context.accept(stream).await.map_err(map_err)?;
+
+        if sni_matched {
+            match self.accept2(stream).await {
+                Ok(out) => return Ok(Some(out)),
+                Err(stream) => {
+                    self.fallback_acceptor
+                        .accept(stream)
+                        .await
+                        .map_err(map_err)?;
+                    Ok(None)
+                }
+            }
+        } else {
+            warn!("Redirect to fallback: SNI mismatch.");
+            self.fallback_acceptor
+                .accept(stream)
+                .await
+                .map_err(map_err)?;
+            Ok(None)
+        }
+    }
+}
+
+impl TrojanInbound {
+    pub async fn new(
+        auth: Arc<dyn Auth>,
+        tls_context: TlsContext,
+        config: Trojan,
+    ) -> Result<TrojanInbound> {
+        let fallback_acceptor = FallbackAcceptor::new(config.fallback)
+            .await
+            .context("Failed to setup fallback server.")?;
+        Ok(TrojanInbound {
+            auth_hub: auth,
+            tls_context,
+            fallback_acceptor,
+        })
     }
 
-    pub async fn accept<IO>(&self, stream: IO) -> Result<OutboundStream, PeekableStream<IO>>
+    pub async fn accept2<IO>(
+        &self,
+        stream: IO,
+    ) -> Result<InboundAccept<String, BoxedStream, BoxedUdpStream>, PeekableStream<IO>>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let mut stream = PeekableStream::new(stream);
         match self.inner_accept(&mut stream).await {
-            Ok(Cmd::Connect(addr)) => Ok(OutboundStream::Tcp(Box::pin(stream), addr)),
-            Ok(Cmd::UdpAssociate) => {
-                Ok(OutboundStream::Udp(Box::pin(Framed::new(stream, UdpCodec))))
-            }
+            Ok((Cmd::Connect(addr), pw)) => Ok(InboundAccept {
+                metadata: pw,
+                request: InboundRequest::TcpConnect {
+                    addr,
+                    stream: Box::pin(stream),
+                },
+            }),
+            Ok((Cmd::UdpAssociate, pw)) => Ok(InboundAccept {
+                metadata: pw,
+                request: InboundRequest::UdpBind {
+                    addr: "0.0.0.0:0".to_string(),
+                    stream: Box::pin(Framed::new(stream, UdpCodec)),
+                },
+            }),
             Err(e) => {
                 warn!("Redirect to fallback: {:?}", e);
                 return Err(stream);
@@ -50,7 +128,7 @@ impl TrojanAcceptor {
         }
     }
 
-    async fn inner_accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<Cmd>
+    async fn inner_accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<(Cmd, String)>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
@@ -64,6 +142,7 @@ impl TrojanAcceptor {
         if !self.auth_hub.auth(&password).await? {
             bail!("{}", &password)
         }
+        let password = password.to_string();
 
         info!("Trojan request accepted: {}", &password);
 
@@ -79,11 +158,11 @@ impl TrojanAcceptor {
         let end = reader.position() + 2;
         stream.drain(end as usize).await?;
 
-        match cmd {
-            1 => Ok(Cmd::Connect(address.to_string())),
-            3 => Ok(Cmd::UdpAssociate),
+        Ok(match cmd {
+            1 => (Cmd::Connect(address.to_string()), password),
+            3 => (Cmd::UdpAssociate, password),
             _ => bail!("Unknown command."),
-        }
+        })
     }
 
     // length of head must be 61
@@ -177,6 +256,6 @@ impl Decoder for UdpCodec {
 
         src.copy_to_slice(&mut buf);
 
-        Ok(Some((buf, address.to_string())))
+        Ok(Some((buf.into(), address.to_string())))
     }
 }
