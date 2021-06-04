@@ -8,8 +8,8 @@ use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 pub struct HookStream<S> {
     inner: S,
-    on_read_done: Box<dyn FnMut(&[u8]) + Send + Sync>,
-    on_write_done: Box<dyn FnMut(&[u8]) + Send + Sync>,
+    on_read_done: Option<Box<dyn FnMut(&[u8]) + Send + Sync>>,
+    on_write_done: Option<Box<dyn FnMut(&[u8]) + Send + Sync>>,
 }
 
 impl<S> AsyncRead for HookStream<S>
@@ -23,11 +23,13 @@ where
     ) -> Poll<io::Result<()>> {
         let before = buf.filled().len();
 
-        let result = ready!(Pin::new(&mut self.inner).poll_read(cx, buf))?;
+        ready!(Pin::new(&mut self.inner).poll_read(cx, buf))?;
 
-        (self.on_read_done)(&buf.filled()[before..]);
+        if let Some(f) = &mut self.on_read_done {
+            f(&buf.filled()[before..]);
+        }
 
-        Poll::Ready(Ok(result))
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -42,7 +44,9 @@ where
     ) -> Poll<io::Result<usize>> {
         let result = ready!(Pin::new(&mut self.inner).poll_write(cx, buf))?;
 
-        (self.on_write_done)(&buf[..result]);
+        if let Some(f) = &mut self.on_write_done {
+            f(&buf[..result]);
+        }
 
         Poll::Ready(Ok(result))
     }
@@ -57,15 +61,27 @@ where
 }
 
 impl<S> HookStream<S> {
-    pub fn new(
-        inner: S,
-        on_read_done: impl FnMut(&[u8]) + Send + Sync + 'static,
-        on_write_done: impl FnMut(&[u8]) + Send + Sync + 'static,
-    ) -> Self {
+    pub fn new(inner: S) -> Self {
         HookStream {
             inner,
-            on_read_done: Box::new(on_read_done),
-            on_write_done: Box::new(on_write_done),
+            on_read_done: None,
+            on_write_done: None,
+        }
+    }
+    pub fn set_on_read_done(
+        &mut self,
+        on_read_done: Option<impl FnMut(&[u8]) + Send + Sync + 'static>,
+    ) {
+        if let Some(f) = on_read_done {
+            self.on_read_done = Some(Box::new(f))
+        }
+    }
+    pub fn set_on_write_done(
+        &mut self,
+        on_write_done: Option<impl FnMut(&[u8]) + Send + Sync + 'static>,
+    ) {
+        if let Some(f) = on_write_done {
+            self.on_write_done = Some(Box::new(f))
         }
     }
 }
