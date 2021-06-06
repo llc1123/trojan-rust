@@ -7,6 +7,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
+use log::info;
 use tokio::net::{lookup_host, TcpStream, UdpSocket};
 use tokio_util::{
     codec::{Decoder, Encoder},
@@ -60,10 +61,12 @@ impl Outbound for DirectOutbound {
     type UdpSocket = BoxedUdpStream;
 
     async fn tcp_connect(&self, address: &str) -> io::Result<Self::TcpStream> {
+        info!("Connecting to target {}", address);
         TcpStream::connect(address).await
     }
 
     async fn udp_bind(&self, address: &str) -> io::Result<Self::UdpSocket> {
+        info!("UDP tunnel {} created.", address);
         let udp = UdpSocket::bind(address).await?;
         let stream = UdpFramed::new(udp, BytesCodec::new())
             .map(|r| r.map(|(a, b)| (a, b.to_string())))
