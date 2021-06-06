@@ -66,7 +66,6 @@ impl Outbound for DirectOutbound {
     }
 
     async fn udp_bind(&self, address: &str) -> io::Result<Self::UdpSocket> {
-        info!("UDP tunnel {} created.", address);
         let udp = UdpSocket::bind(address).await?;
         let stream = UdpFramed::new(udp, BytesCodec::new())
             .map(|r| r.map(|(a, b)| (a, b.to_string())))
