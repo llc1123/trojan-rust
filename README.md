@@ -1,4 +1,5 @@
 # Trojan-rust &middot; [![](https://img.shields.io/github/license/llc1123/trojan-rust)](https://github.com/llc1123/trojan-rust/blob/master/LICENSE) ![](https://img.shields.io/github/workflow/status/llc1123/trojan-rust/nightly) ![](https://img.shields.io/github/downloads/llc1123/trojan-rust/total) ![](https://img.shields.io/docker/pulls/llc1123/trojan-rust) ![](https://img.shields.io/docker/image-size/llc1123/trojan-rust/latest) ![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fllc1123%2Ftrojan-rust.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fllc1123%2Ftrojan-rust?ref=badge_shield)
 
 Yet another [trojan-gfw](https://trojan-gfw.github.io/trojan/) implementation in Rust.
 
@@ -94,3 +95,5 @@ PRs welcome
 
 ## License
 Trojan-rust is [MIT licensed](https://github.com/llc1123/trojan-rust/blob/master/LICENSE).
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fllc1123%2Ftrojan-rust.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2Fllc1123%2Ftrojan-rust?ref=badge_large)
