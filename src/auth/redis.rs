@@ -1,6 +1,7 @@
 use super::Auth;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
+use log::info;
 use redis::AsyncCommands;
 
 pub struct RedisAuthenticator {
@@ -9,8 +10,9 @@ pub struct RedisAuthenticator {
 
 impl RedisAuthenticator {
     pub fn new(server: &str) -> Result<RedisAuthenticator> {
-        let client = redis::Client::open(format!("redis://{}/", server))
-            .context(format!("Redis server {} unavailable.", &server))?;
+        let client = redis::Client::open(format!("redis://{}/", server))?;
+        client.get_connection()?;
+        info!("Using redis auth: {}", server);
         Ok(RedisAuthenticator { client })
     }
 }

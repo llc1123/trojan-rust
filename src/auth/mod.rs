@@ -3,7 +3,7 @@ pub mod redis;
 
 use self::{from_config::ConfigAuthenticator, redis::RedisAuthenticator};
 use crate::utils::config::Config;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 
 #[async_trait]
@@ -22,7 +22,10 @@ impl AuthHub {
         let config_auth = ConfigAuthenticator::new(config.trojan.password.clone())?;
         let mut redis_auth: Option<RedisAuthenticator> = None;
         if let Some(redis) = &config.redis {
-            redis_auth = Some(RedisAuthenticator::new(&redis.server)?);
+            redis_auth = Some(
+                RedisAuthenticator::new(&redis.server)
+                    .context(format!("Unable to connect redis server {}", &redis.server))?,
+            );
         }
         Ok(AuthHub {
             config_auth,
