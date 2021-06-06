@@ -1,4 +1,4 @@
-# mode = "server"
+# mode = "server" # optional
 
 ## uses default values if not present
 # [trojan]
