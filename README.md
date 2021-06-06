@@ -2,12 +2,12 @@
 
 [![LICENSE](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/llc1123/trojan-rust/blob/master/LICENSE)
 [![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2Fllc1123%2Ftrojan-rust.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2Fllc1123%2Ftrojan-rust?ref=badge_shield)
-![CI](https://img.shields.io/github/workflow/status/llc1123/trojan-rust/nightly)
+[![CI](https://img.shields.io/github/workflow/status/llc1123/trojan-rust/nightly)](https://github.com/llc1123/trojan-rust/actions)
 ![release version](https://img.shields.io/github/v/release/llc1123/trojan-rust)
 ![release downloads](https://img.shields.io/github/downloads/llc1123/trojan-rust/total)
-![docker pulls](https://img.shields.io/docker/pulls/llc1123/trojan-rust)
-![docker image size](https://img.shields.io/docker/image-size/llc1123/trojan-rust/latest)
-![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
+[![docker pulls](https://img.shields.io/docker/pulls/llc1123/trojan-rust)](https://hub.docker.com/r/llc1123/trojan-rust)
+[![docker image size](https://img.shields.io/docker/image-size/llc1123/trojan-rust/latest)](https://hub.docker.com/r/llc1123/trojan-rust)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/llc1123/trojan-rust/pulls)
 
 Yet another [trojan-gfw](https://trojan-gfw.github.io/trojan/) implementation in Rust.
 
