@@ -2,7 +2,7 @@ FROM rustlang/rust:nightly-alpine AS builder
 RUN apk add alpine-sdk perl
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN cargo install --target x86_64-unknown-linux-musl --path .
+RUN cargo install --path .
 
 FROM alpine:latest
 COPY --from=builder /usr/local/cargo/bin/trojan-rust /trojan-rust/
