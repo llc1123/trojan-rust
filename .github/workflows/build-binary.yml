@@ -1,6 +1,6 @@
-on: [push, pull_request]
-
 name: build-binary
+
+on: [push, pull_request]
 
 jobs:
   build-windows:

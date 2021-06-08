@@ -1,9 +1,6 @@
 name: build-docker-image
 
-on:
-  push:
-    branches:
-      - 'dev'
+on: [push]
 
 jobs:
   docker:
@@ -12,6 +9,17 @@ jobs:
       -
         name: Checkout
         uses: actions/checkout@v2
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v3
+        with:
+          images: |
+            llc1123/trojan-rust
+            ghcr.io/llc1123/trojan-rust
+          tags: |
+            type=edge
+            type=semver,pattern={{version}}
       -
         name: Set up QEMU
         uses: docker/setup-qemu-action@v1
@@ -34,10 +42,9 @@ jobs:
       -
         name: Build and push
         uses: docker/build-push-action@v2
+        if: github.ref == 'refs/heads/dev'
         with:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: |
-            llc1123/trojan-rust:nightly
-            ghcr.io/llc1123/trojan-rust:nightly
+          tags: ${{ steps.meta.outputs.tags }}
