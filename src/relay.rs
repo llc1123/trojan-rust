@@ -108,7 +108,7 @@ where
                         }))
                         .ok();
                     if let Err(e) = Self::process(outbound, accept).await {
-                        warn!("relay error: {:?}", e)
+                        warn!("Relay error: {:?}", e)
                     }
                 }
                 Ok(()) as Result<()>
@@ -124,7 +124,7 @@ async fn stat(auth: Arc<dyn Auth>, rx: UnboundedReceiver<PacketStat>) {
             let auth = auth.clone();
             async move {
                 if let Err(e) = auth.stat(&i.password, i.upload, i.download).await {
-                    error!("Failed to stat {:?}", e);
+                    error!("Failed to stat: {:?}", e);
                 }
             }
         })

@@ -54,8 +54,10 @@ OPTIONS:
 ```
 
 ## Docker Image
-```
+```bash
 docker run -p 443:443 llc1123/trojan-rust example.toml
+# or use github container registry
+docker run -p 443:443 ghcr.io/llc1123/trojan-rust example.toml
 ```
 
 ## Config
