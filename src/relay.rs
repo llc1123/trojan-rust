@@ -3,6 +3,7 @@ use crate::common::UdpStream;
 use crate::inbound::{Inbound, InboundAccept, InboundRequest};
 use crate::outbound::Outbound;
 use crate::utils::count_stream::CountStream;
+use crate::utils::timeout_stream::TimeoutStream;
 use anyhow::{anyhow, bail, Context, Error, Result};
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::error;
@@ -20,6 +21,7 @@ pub struct Relay<I, O> {
     inbound: Arc<I>,
     outbound: Arc<O>,
     tcp_nodelay: bool,
+    pub tcp_timeout: Option<Duration>,
 }
 
 impl<I, O> Relay<I, O>
@@ -78,6 +80,7 @@ where
             inbound: Arc::new(inbound),
             outbound: Arc::new(outbound),
             tcp_nodelay,
+            tcp_timeout: None,
         }
     }
     pub async fn serve_trojan(&self, auth: Arc<dyn Auth>) -> Result<()> {
@@ -91,6 +94,7 @@ where
                 .context("Set TCP_NODELAY failed")?;
 
             let (stream, sender) = CountStream::new2(stream);
+            let stream = TimeoutStream::new(stream, self.tcp_timeout);
 
             let inbound = self.inbound.clone();
             let outbound = self.outbound.clone();

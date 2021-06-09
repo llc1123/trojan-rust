@@ -1012,6 +1012,7 @@ dependencies = [
  "hyper",
  "log",
  "openssl",
+ "pin-project-lite",
  "redis",
  "serde",
  "serde_derive",

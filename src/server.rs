@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use crate::{
     auth::{Auth, AuthHub},
@@ -23,7 +23,8 @@ pub async fn start(config: Config) -> Result<()> {
     let inbound = TrojanInbound::new(auth_hub.clone(), tls_context, config.trojan).await?;
     let outbound = DirectOutbound::new();
 
-    let relay = Relay::new(listener, inbound, outbound, config.tls.tcp_nodelay);
+    let mut relay = Relay::new(listener, inbound, outbound, config.tls.tcp_nodelay);
+    relay.tcp_timeout = Some(Duration::from_secs(600));
 
     info!("Service started.");
 
