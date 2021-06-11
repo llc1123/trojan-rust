@@ -1,8 +1,8 @@
 use crate::{common::AsyncStream, utils::config::Tls};
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Context, Result};
 use futures::TryFutureExt;
-use log::{debug, trace};
-use openssl::ssl::{self, NameType, Ssl};
+use log::{debug, info, trace};
+use openssl::ssl::{self, NameType, Ssl, SslContext};
 use std::{env, ops::Deref, path::Path, pin::Pin};
 use tokio::{fs::OpenOptions, io::AsyncWriteExt, sync::mpsc};
 use tokio_openssl::SslStream;
@@ -15,6 +15,22 @@ pub struct TlsContext {
 pub struct TlsAccept<S> {
     pub sni_matched: bool,
     pub stream: SslStream<S>,
+}
+
+fn get_alt_names_from_ssl_context(context: &SslContext) -> Option<Vec<String>> {
+    if let Some(cert) = context.certificate() {
+        if let Some(names) = cert.subject_alt_names() {
+            return Some(
+                names
+                    .iter()
+                    .map(|x| x.dnsname())
+                    .filter(|x| x.is_some())
+                    .map(|x| String::from(x.unwrap()))
+                    .collect(),
+            );
+        }
+    }
+    None
 }
 
 impl TlsContext {
@@ -37,12 +53,18 @@ impl TlsContext {
         acceptor.set_private_key_file(&config.key, ssl::SslFiletype::PEM)?;
         acceptor.check_private_key()?;
         acceptor.set_keylog_callback(keylog_callback);
+        let context = acceptor.build().into_context();
+
+        let names = get_alt_names_from_ssl_context(&context)
+            .ok_or(anyhow!("Cannot get domain names from cert."))?;
+        info!("{:?}", names);
 
         Ok(TlsContext {
-            inner: acceptor.build().into_context(),
+            inner: context,
             sni: config.sni.clone(),
         })
     }
+
     pub async fn accept<S: AsyncStream + Unpin>(&self, stream: S) -> Result<TlsAccept<S>> {
         let mut stream = SslStream::new(Ssl::new(&self.inner)?, stream)?;
         Pin::new(&mut stream)
