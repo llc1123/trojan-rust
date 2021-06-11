@@ -3,7 +3,6 @@ use crate::common::UdpStream;
 use crate::inbound::{Inbound, InboundAccept, InboundRequest};
 use crate::outbound::Outbound;
 use crate::utils::count_stream::CountStream;
-// use crate::utils::timeout_stream::TimeoutStream;
 use anyhow::{anyhow, bail, Context, Error, Result};
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::error;

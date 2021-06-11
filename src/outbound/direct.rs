@@ -17,7 +17,7 @@ use tokio_util::{
 pub struct BytesCodec(());
 
 impl BytesCodec {
-    /// Creates a new `BytesCodec` for shipping around raw bytes.
+    // Creates a new `BytesCodec` for shipping around raw bytes.
     pub fn new() -> BytesCodec {
         BytesCodec(())
     }
