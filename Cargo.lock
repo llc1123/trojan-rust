@@ -913,6 +913,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "tokio-io-timeout"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90c49f106be240de154571dd31fbe48acb10ba6c6dd6f6517ad603abffa42de9"
+dependencies = [
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
 name = "tokio-macros"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1012,13 +1022,13 @@ dependencies = [
  "hyper",
  "log",
  "openssl",
- "pin-project-lite",
  "redis",
  "serde",
  "serde_derive",
  "sha2",
  "socks5-protocol",
  "tokio",
+ "tokio-io-timeout",
  "tokio-openssl",
  "tokio-stream",
  "tokio-util",

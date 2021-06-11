@@ -3,7 +3,7 @@ use crate::common::UdpStream;
 use crate::inbound::{Inbound, InboundAccept, InboundRequest};
 use crate::outbound::Outbound;
 use crate::utils::count_stream::CountStream;
-use crate::utils::timeout_stream::TimeoutStream;
+// use crate::utils::timeout_stream::TimeoutStream;
 use anyhow::{anyhow, bail, Context, Error, Result};
 use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::error;
@@ -12,6 +12,7 @@ use std::{sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tokio::{io::copy_bidirectional, pin, select, time::timeout};
+use tokio_io_timeout::TimeoutStream;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
 const FULL_CONE_TIMEOUT: Duration = Duration::from_secs(30);
@@ -36,8 +37,7 @@ where
         match inbound_accept.request {
             InboundRequest::TcpConnect { addr, stream } => {
                 let target = outbound.tcp_connect(&addr).await?;
-                pin!(target);
-                pin!(stream);
+                pin!(target, stream);
                 copy_bidirectional(&mut stream, &mut target)
                     .await
                     .map_err(|_| anyhow!("Connection reset by peer."))?;
@@ -94,13 +94,14 @@ where
                 .context("Set TCP_NODELAY failed")?;
 
             let (stream, sender) = CountStream::new2(stream);
-            let stream = TimeoutStream::new(stream, self.tcp_timeout);
+            let mut stream = TimeoutStream::new(stream);
+            stream.set_read_timeout(self.tcp_timeout);
 
             let inbound = self.inbound.clone();
             let outbound = self.outbound.clone();
             let t = tx.clone();
             tokio::spawn(async move {
-                let inbound_accept = inbound.accept(stream, addr).await?;
+                let inbound_accept = inbound.accept(Box::pin(stream), addr).await?;
                 if let Some(accept) = inbound_accept {
                     // Here we got trojan password
 

@@ -36,4 +36,5 @@ hex = "0.4.3"
 redis = { version = "0.20.0", features = ["tokio-comp"] }
 tokio-openssl = "0.6.1"
 openssl = { version = "0.10.34", features = ["vendored"] }
-pin-project-lite = "0.2.6"
+# pin-project-lite = "0.2.6"
+tokio-io-timeout = "1.1.1"
