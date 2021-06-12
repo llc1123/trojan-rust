@@ -19,7 +19,7 @@ Yet another [trojan-gfw](https://trojan-gfw.github.io/trojan/) implementation in
 
 ## How trojan handles connections
 
-- Not a TLS connection or TLS handshake failed: Connection Reset.
+- Not a TLS connection or TLS handshake failed: Connection Reset. (including SNI mismatch if not present in cert SAN)
 - SNI mismatch: Redirect to fallback
 - Expected TLS but not a trojan request: Redirect to fallback.
 - Trojan request but password incorrect: Redirect to fallback.
