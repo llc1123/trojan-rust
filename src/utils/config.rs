@@ -1,5 +1,7 @@
 use anyhow::Result;
 use serde_derive::Deserialize;
+use serde_with::formats::PreferMany;
+use serde_with::{serde_as, OneOrMany};
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "lowercase")]
@@ -35,13 +37,16 @@ fn default_listen() -> String {
     String::from("0.0.0.0:443")
 }
 
+#[serde_as]
 #[derive(Deserialize, Debug)]
 pub struct Tls {
     #[serde(default = "default_listen")]
     pub listen: String,
     #[serde(default)]
     pub tcp_nodelay: bool,
-    pub sni: String,
+    #[serde(default)]
+    #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
+    pub sni: Vec<String>,
     pub cert: String,
     pub key: String,
 }

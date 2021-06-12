@@ -1,15 +1,15 @@
 use crate::{common::AsyncStream, utils::config::Tls};
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use futures::TryFutureExt;
 use log::{debug, info, trace};
 use openssl::ssl::{self, NameType, Ssl, SslContext};
-use std::{env, ops::Deref, path::Path, pin::Pin};
+use std::{collections::HashSet, env, iter::FromIterator, ops::Deref, path::Path, pin::Pin};
 use tokio::{fs::OpenOptions, io::AsyncWriteExt, sync::mpsc};
 use tokio_openssl::SslStream;
 
 pub struct TlsContext {
     inner: ssl::SslContext,
-    sni: String,
+    sni: Option<HashSet<String>>,
 }
 
 pub struct TlsAccept<S> {
@@ -23,14 +23,23 @@ fn get_alt_names_from_ssl_context(context: &SslContext) -> Option<Vec<String>> {
             return Some(
                 names
                     .iter()
-                    .map(|x| x.dnsname())
-                    .filter(|x| x.is_some())
-                    .map(|x| String::from(x.unwrap()))
+                    .filter_map(|x| x.dnsname())
+                    .map(String::from)
                     .collect(),
             );
         }
     }
     None
+}
+
+// TODO: match wildcard sni
+fn sni_match(hostname: &String, sni_list: &Vec<String>) -> bool {
+    for name in sni_list {
+        if *hostname == *name {
+            return true;
+        }
+    }
+    false
 }
 
 impl TlsContext {
@@ -55,13 +64,26 @@ impl TlsContext {
         acceptor.set_keylog_callback(keylog_callback);
         let context = acceptor.build().into_context();
 
-        let names = get_alt_names_from_ssl_context(&context)
+        let names_from_cert = get_alt_names_from_ssl_context(&context)
             .ok_or(anyhow!("Cannot get domain names from cert."))?;
-        info!("{:?}", names);
+
+        let names_from_config = config.sni.clone();
+
+        let sni = if names_from_config.len() == 0 {
+            info!("Using SAN from cert: {:?}", &names_from_cert);
+            None
+        } else {
+            for name in &names_from_config {
+                if !sni_match(name, &names_from_cert) {
+                    bail!("SNI {} in config not present in cert.", &name)
+                }
+            }
+            Some(HashSet::from_iter(names_from_config))
+        };
 
         Ok(TlsContext {
             inner: context,
-            sni: config.sni.clone(),
+            sni,
         })
     }
 
@@ -78,7 +100,12 @@ impl TlsContext {
         debug!("SNI: {:?}", &servername);
 
         Ok(TlsAccept {
-            sni_matched: servername == self.sni,
+            // TODO: match wildcard sni
+            sni_matched: if let Some(sni) = &self.sni {
+                sni.contains(servername)
+            } else {
+                true
+            },
             stream,
         })
     }

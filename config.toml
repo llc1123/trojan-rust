@@ -9,7 +9,7 @@
 [tls]
 # listen = "0.0.0.0:443" # optional
 # tcp_nodelay = false # optional
-sni = "example.com" # required
+# sni = [] # optional
 cert = "fullchain.pem" # required
 key = "privkey.pem" # required
 

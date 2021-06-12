@@ -76,13 +76,87 @@ example.toml
 [tls]
 # listen = "0.0.0.0:443" # optional
 # tcp_nodelay = false # optional
-sni = "example.com" # required
+# sni = [] # optional
 cert = "fullchain.pem" # required
 key = "privkey.pem" # required
 
 ## doesn't use redis if not present
 # [redis]
 # server = "127.0.0.1:6379" # optional
+```
+
+## Multiple hostnames
+You can use as many hostnames as they are contained in the certificate provided. Or use all hostnames in the certificate SAN if left absent or empty.
+
+For example:
+```
+SAN in cert: a.example.com b.example.com
+SNI: []
+a.example.com ✔️
+b.example.com ✔️
+other.com ❌
+
+SAN in cert: a.example.com b.example.com
+SNI: ["a.example.com"]
+a.example.com ✔️
+b.example.com ❌
+other.com ❌
+
+SAN in cert: a.example.com b.example.com
+SNI: ["a.example.com", "b.example.com"]
+a.example.com ✔️
+b.example.com ✔️
+other.com ❌
+
+SAN in cert: a.example.com b.example.com
+SNI: ["c.example.com"]
+Error on startup
+```
+
+## Wildcard SNI matching
+Trojan-rust supports wildcard certificates, but with restrictions:
+- A wildcard certificate must be provided.
+- The `SNI` config must be `[]` or left absent.
+
+For example:
+```
+SAN in cert: *.example.com
+SNI: []
+a.example.com ✔️
+b.example.com ✔️
+example.com ❌ // doesn't match wildcard
+a.b.example.com ❌ // doesn't match wildcard
+other.com ❌
+
+SAN in cert: *.example-a.com, *.example-b.com
+SNI: []
+a.example-a.com ✔️
+a.example-b.com ✔️
+other.com ❌
+
+SAN in cert: *.example.com, example.com
+SNI: []
+example.com ✔️
+a.example.com ✔️
+other.com ❌
+
+SAN in cert: *.example.com, example.com
+SNI: ["example.com"]
+example.com ✔️
+a.example.com ❌
+other.com ❌
+
+// Not yet supported
+SAN in cert: *.example.com, example.com
+SNI: ["*.example.com"] 
+example.com ❌
+a.example.com ❌ 
+other.com ❌
+
+// Not yet supported
+SAN in cert: *.example.com
+SNI: ["a.example.com"] 
+Error on startup
 ```
 
 ## Redis Auth
@@ -99,6 +173,7 @@ Trojan-rust DOES NOT offer a method adding or removing a user. Please do it by y
 - [ ] Client mode
 - [ ] TPROXY mode
 - [ ] Benchmarks
+- [ ] Wildcards in SNI config
 
 ## Contributing
 PRs welcome
