@@ -14,8 +14,8 @@ impl ACL {
             return false;
         }
         match address {
-            SocketAddr::V4(addr) => addr.ip().is_global(),
-            SocketAddr::V6(addr) => addr.ip().is_global(),
+            SocketAddr::V4(addr) => !addr.ip().is_global(),
+            SocketAddr::V6(addr) => !addr.ip().is_global(),
         }
     }
 }
