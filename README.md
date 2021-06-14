@@ -80,6 +80,11 @@ example.toml
 cert = "fullchain.pem" # required
 key = "privkey.pem" # required
 
+## uses default values if not present
+# [outbound]
+## Useful when you don't want your clients have access to your local network especially the redis server.
+# block_local = false  # optional
+
 ## doesn't use redis if not present
 # [redis]
 # server = "127.0.0.1:6379" # optional
@@ -167,6 +172,8 @@ HSET [sha224(password)] download 0 upload 0
 Trojan-rust checks if the hash exists in redis on each connection. If true, the user is authenticated and the flow will be recorded.
 
 Trojan-rust DOES NOT offer a method adding or removing a user. Please do it by yourself.
+
+**Don't forget to enable `block_local` feature to avoid attacks.**
 
 ## TODO
 

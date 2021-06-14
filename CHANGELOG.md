@@ -1,3 +1,6 @@
+## 1.2.0
+- Support blocking requests targeting local and private network.
+
 ## 1.1.0
 - Support multiple hostnames and default SAN in certificate
 
