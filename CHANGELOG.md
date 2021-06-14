@@ -1,3 +1,6 @@
+## 1.2.1
+- Fix ACL blocking requests incorrectly
+
 ## 1.2.0
 - Support blocking requests targeting local and private network.
 
