@@ -1,7 +1,4 @@
-use std::{
-    io::{self, ErrorKind},
-    sync::Arc,
-};
+use std::{future::ready, io, sync::Arc};
 
 use crate::{common::UdpPacket, utils::acl::ACL};
 
@@ -9,7 +6,7 @@ use super::{BoxedUdpStream, Outbound};
 use anyhow::Result;
 use async_trait::async_trait;
 use bytes::{BufMut, Bytes, BytesMut};
-use futures::{FutureExt, SinkExt, StreamExt};
+use futures::{stream, FutureExt, SinkExt, StreamExt};
 use log::{info, warn};
 use tokio::net::{lookup_host, TcpStream, UdpSocket};
 use tokio_util::{
@@ -98,19 +95,15 @@ impl Outbound for DirectOutbound {
         let acl = self.acl.clone();
         let stream = UdpFramed::new(udp, BytesCodec::new())
             .map(|r| r.map(|(a, b)| (a, b.to_string())))
-            .with(move |(buf, addr): UdpPacket| {
+            .with_flat_map(move |(buf, addr): UdpPacket| {
                 let acl = acl.clone();
-                async move {
-                    let addr = lookup_host(addr)
-                        .await?
-                        .next()
-                        .ok_or(io::Error::from(ErrorKind::AddrNotAvailable))?;
-                    match acl.has_match(&addr) {
-                        true => Err(io::Error::from(ErrorKind::PermissionDenied)),
-                        false => Ok((buf, addr)) as io::Result<_>,
-                    }
-                }
-                .fuse()
+                stream::once(lookup_host(addr).map(move |r| {
+                    r.map(|mut i| i.next())
+                        .ok()
+                        .flatten()
+                        .and_then(|i| (!acl.has_match(&i)).then(|| Ok((buf, i))))
+                }))
+                .filter_map(|r| ready(r))
             });
         Ok(Box::pin(stream))
     }
