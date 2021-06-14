@@ -1,3 +1,6 @@
+## 1.2.2
+- Workaround for Sink::with bug which will cause panic on udp.
+
 ## 1.2.1
 - Fix ACL blocking requests incorrectly
 
