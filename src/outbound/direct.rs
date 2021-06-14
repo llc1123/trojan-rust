@@ -68,17 +68,29 @@ impl Outbound for DirectOutbound {
     async fn tcp_connect(&self, address: &str) -> io::Result<Self::TcpStream> {
         info!("Connecting to target {}", address);
 
-        if let Some(addr) = lookup_host(address).await?.next() {
+        let addrs = lookup_host(address).await?.filter(|addr| {
             if self.acl.has_match(addr) {
-                warn!("ACL blocked.");
-                return Err(io::Error::from(ErrorKind::PermissionDenied));
+                warn!("ACL blocked: {}", &addr);
+                return false;
             }
-        } else {
-            warn!("Unable to resolve {}", &address);
-            return Err(io::Error::from(ErrorKind::AddrNotAvailable));
+            return true;
+        });
+
+        let mut last_err = None;
+
+        for addr in addrs {
+            match TcpStream::connect(addr).await {
+                Ok(stream) => return Ok(stream),
+                Err(e) => last_err = Some(e),
+            }
         }
 
-        TcpStream::connect(address).await
+        Err(last_err.unwrap_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "could not resolve to any address",
+            )
+        }))
     }
 
     async fn udp_bind(&self, address: &str) -> io::Result<Self::UdpSocket> {
@@ -93,7 +105,7 @@ impl Outbound for DirectOutbound {
                         .await?
                         .next()
                         .ok_or(io::Error::from(ErrorKind::AddrNotAvailable))?;
-                    match acl.has_match(addr) {
+                    match acl.has_match(&addr) {
                         true => Err(io::Error::from(ErrorKind::PermissionDenied)),
                         false => Ok((buf, addr)) as io::Result<_>,
                     }

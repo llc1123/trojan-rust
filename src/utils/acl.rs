@@ -9,7 +9,7 @@ impl ACL {
         ACL { block_local }
     }
 
-    pub fn has_match(&self, address: SocketAddr) -> bool {
+    pub fn has_match(&self, address: &SocketAddr) -> bool {
         if !self.block_local {
             return false;
         }
