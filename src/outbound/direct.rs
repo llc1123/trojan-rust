@@ -51,12 +51,12 @@ impl Encoder<Bytes> for BytesCodec {
 }
 
 pub struct DirectOutbound {
-    acl: ACL,
+    acl: Arc<ACL>,
 }
 
 impl DirectOutbound {
     pub fn new(acl: ACL) -> Self {
-        DirectOutbound { acl }
+        DirectOutbound { acl: Arc::new(acl) }
     }
 }
 
@@ -83,16 +83,20 @@ impl Outbound for DirectOutbound {
 
     async fn udp_bind(&self, address: &str) -> io::Result<Self::UdpSocket> {
         let udp = UdpSocket::bind(address).await?;
+        let acl = self.acl.clone();
         let stream = UdpFramed::new(udp, BytesCodec::new())
             .map(|r| r.map(|(a, b)| (a, b.to_string())))
-            .with(|(buf, addr): UdpPacket| async move {
-                let addr = lookup_host(addr)
-                    .await?
-                    .next()
-                    .ok_or(io::Error::from(ErrorKind::AddrNotAvailable))?;
-                match self.acl.has_match(addr) {
-                    true => Err(io::Error::from(ErrorKind::PermissionDenied)),
-                    false => Ok((buf, addr)) as io::Result<_>,
+            .with(move |(buf, addr): UdpPacket| {
+                let acl = acl.clone();
+                async move {
+                    let addr = lookup_host(addr)
+                        .await?
+                        .next()
+                        .ok_or(io::Error::from(ErrorKind::AddrNotAvailable))?;
+                    match acl.has_match(addr) {
+                        true => Err(io::Error::from(ErrorKind::PermissionDenied)),
+                        false => Ok((buf, addr)) as io::Result<_>,
+                    }
                 }
             });
         Ok(Box::pin(stream))
