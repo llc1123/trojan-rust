@@ -1080,14 +1080,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "treebitmap"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6bf423939ac9ccf4083788879b883a7149176586f9cf8b0fb1fd88b66ad692b5"
-
-[[package]]
 name = "trojan-rust"
-version = "1.0.1"
+version = "1.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -1113,7 +1107,6 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "toml",
- "treebitmap",
 ]
 
 [[package]]

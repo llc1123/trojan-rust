@@ -2,10 +2,11 @@ cargo-features = ["strip"]
 
 [package]
 name = "trojan-rust"
-version = "1.0.1"
+version = "1.1.0"
 edition = "2018"
 authors = ["llc1123 <i@llc.moe>", "imspace <spacemeowx2@gmail.com>"]
 description = "Yet another trojan-gfw implementation in Rust"
+publish = false
 
 [profile.release]
 lto = true
@@ -38,4 +39,3 @@ tokio-openssl = "0.6.1"
 openssl = { version = "0.10.34", features = ["vendored"] }
 tokio-io-timeout = "1.1.1"
 serde_with = "1.9.2"
-treebitmap = "0.4.0"

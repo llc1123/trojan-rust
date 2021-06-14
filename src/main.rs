@@ -1,3 +1,5 @@
+#![feature(ip)]
+
 mod auth;
 mod common;
 mod inbound;
