@@ -9,7 +9,7 @@ use super::{BoxedUdpStream, Outbound};
 use anyhow::Result;
 use async_trait::async_trait;
 use bytes::{BufMut, Bytes, BytesMut};
-use futures::{SinkExt, StreamExt};
+use futures::{FutureExt, SinkExt, StreamExt};
 use log::{info, warn};
 use tokio::net::{lookup_host, TcpStream, UdpSocket};
 use tokio_util::{
@@ -110,6 +110,7 @@ impl Outbound for DirectOutbound {
                         false => Ok((buf, addr)) as io::Result<_>,
                     }
                 }
+                .fuse()
             });
         Ok(Box::pin(stream))
     }
