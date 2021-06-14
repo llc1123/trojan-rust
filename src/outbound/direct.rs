@@ -1,13 +1,16 @@
-use std::io::{self, ErrorKind};
+use std::{
+    io::{self, ErrorKind},
+    sync::Arc,
+};
 
-use crate::common::UdpPacket;
+use crate::{common::UdpPacket, utils::acl::ACL};
 
 use super::{BoxedUdpStream, Outbound};
 use anyhow::Result;
 use async_trait::async_trait;
 use bytes::{BufMut, Bytes, BytesMut};
 use futures::{SinkExt, StreamExt};
-use log::info;
+use log::{info, warn};
 use tokio::net::{lookup_host, TcpStream, UdpSocket};
 use tokio_util::{
     codec::{Decoder, Encoder},
@@ -47,11 +50,13 @@ impl Encoder<Bytes> for BytesCodec {
     }
 }
 
-pub struct DirectOutbound;
+pub struct DirectOutbound {
+    acl: ACL,
+}
 
 impl DirectOutbound {
-    pub fn new() -> Self {
-        DirectOutbound
+    pub fn new(acl: ACL) -> Self {
+        DirectOutbound { acl }
     }
 }
 
@@ -62,6 +67,17 @@ impl Outbound for DirectOutbound {
 
     async fn tcp_connect(&self, address: &str) -> io::Result<Self::TcpStream> {
         info!("Connecting to target {}", address);
+
+        if let Some(addr) = lookup_host(address).await?.next() {
+            if self.acl.has_match(addr) {
+                warn!("ACL blocked.");
+                return Err(io::Error::from(ErrorKind::PermissionDenied));
+            }
+        } else {
+            warn!("Unable to resolve {}", &address);
+            return Err(io::Error::from(ErrorKind::AddrNotAvailable));
+        }
+
         TcpStream::connect(address).await
     }
 
@@ -74,7 +90,10 @@ impl Outbound for DirectOutbound {
                     .await?
                     .next()
                     .ok_or(io::Error::from(ErrorKind::AddrNotAvailable))?;
-                Ok((buf, addr)) as io::Result<_>
+                match self.acl.has_match(addr) {
+                    true => Err(io::Error::from(ErrorKind::PermissionDenied)),
+                    false => Ok((buf, addr)) as io::Result<_>,
+                }
             });
         Ok(Box::pin(stream))
     }

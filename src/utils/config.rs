@@ -22,6 +22,8 @@ pub struct Config {
     #[serde(default)]
     pub trojan: Trojan,
     pub tls: Tls,
+    #[serde(default)]
+    pub outbound: Outbound,
     pub redis: Option<Redis>,
 }
 
@@ -49,6 +51,12 @@ pub struct Tls {
     pub sni: Vec<String>,
     pub cert: String,
     pub key: String,
+}
+
+#[derive(Deserialize, Debug, Default)]
+pub struct Outbound {
+    #[serde(default)]
+    pub block_local: bool,
 }
 
 fn default_redis() -> String {

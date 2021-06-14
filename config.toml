@@ -13,6 +13,10 @@
 cert = "fullchain.pem" # required
 key = "privkey.pem" # required
 
+## uses default values if not present
+# [outbound]
+# block_local = false  # optional
+
 ## doesn't use redis if not present
 # [redis]
 # server = "127.0.0.1:6379" # optional

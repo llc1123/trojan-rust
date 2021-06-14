@@ -5,7 +5,7 @@ use crate::{
     inbound::{tls::TlsContext, trojan::TrojanInbound},
     outbound::direct::DirectOutbound,
     relay::Relay,
-    utils::config::Config,
+    utils::{acl::ACL, config::Config},
 };
 use anyhow::{Context, Result};
 use log::{debug, info};
@@ -21,7 +21,7 @@ pub async fn start(config: Config) -> Result<()> {
     let auth_hub: Arc<dyn Auth> = Arc::new(AuthHub::new(&config).await?);
     let tls_context = TlsContext::new(&config.tls).context("Failed to setup TLS server.")?;
     let inbound = TrojanInbound::new(auth_hub.clone(), tls_context, config.trojan).await?;
-    let outbound = DirectOutbound::new();
+    let outbound = DirectOutbound::new(ACL::new(config.outbound.block_local));
 
     let mut relay = Relay::new(listener, inbound, outbound, config.tls.tcp_nodelay);
     relay.tcp_timeout = Some(Duration::from_secs(600));

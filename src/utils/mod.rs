@@ -1,3 +1,4 @@
+pub mod acl;
 pub mod config;
 pub mod count_stream;
 pub mod logger;
