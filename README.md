@@ -16,6 +16,7 @@ Yet another [trojan-gfw](https://trojan-gfw.github.io/trojan/) implementation in
 - Supports Redis auth & flow stat.
 - Uses OpenSSL as crypto backend.
 - Uses tokio as async runtime.
+- Accurate flow stat (includes TLS overhead).
 
 ## How trojan handles connections
 
