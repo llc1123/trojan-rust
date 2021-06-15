@@ -2,7 +2,7 @@ cargo-features = ["strip"]
 
 [package]
 name = "trojan-rust"
-version = "1.2.2"
+version = "1.2.3"
 edition = "2018"
 authors = ["llc1123 <i@llc.moe>", "imspace <spacemeowx2@gmail.com>"]
 description = "Yet another trojan-gfw implementation in Rust"
