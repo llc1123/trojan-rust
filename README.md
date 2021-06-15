@@ -175,6 +175,12 @@ Trojan-rust DOES NOT offer a method adding or removing a user. Please do it by y
 
 **Don't forget to enable `block_local` feature to avoid attacks.**
 
+## SSL key logging
+Enabled by setting environment variable `SSLKEYLOGFILE=filename`.
+
+**For debug use only. Never use in production.**
+
+
 ## TODO
 
 - [ ] Client mode
