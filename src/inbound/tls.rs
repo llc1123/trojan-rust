@@ -35,15 +35,6 @@ fn get_alt_names_from_ssl_context(context: &SslContext) -> Option<Vec<String>> {
     None
 }
 
-fn sni_match(hostname: &String, sni_list: &Vec<String>) -> bool {
-    for name in sni_list {
-        if wildcard_match::is_match(hostname, name) {
-            return true;
-        }
-    }
-    false
-}
-
 impl TlsContext {
     pub fn new(config: &Tls) -> Result<TlsContext> {
         let (tx, rx) = mpsc::unbounded_channel::<String>();
@@ -76,7 +67,7 @@ impl TlsContext {
             None
         } else {
             for name in &names_from_config {
-                if !sni_match(name, &names_from_cert) {
+                if !wildcard_match::has_match(name, names_from_cert.iter()) {
                     bail!("SNI {} in config not present in cert.", &name)
                 }
             }
@@ -102,9 +93,12 @@ impl TlsContext {
         debug!("SNI: {:?}", &servername);
 
         Ok(TlsAccept {
-            // TODO: match wildcard sni
             sni_matched: if let Some(sni) = &self.sni {
-                sni.contains(servername)
+                if sni.contains(servername) {
+                    true
+                } else {
+                    wildcard_match::has_match(servername, sni.iter())
+                }
             } else {
                 true
             },

@@ -120,9 +120,7 @@ Error on startup
 ```
 
 ## Wildcard SNI matching
-Trojan-rust supports wildcard certificates, but with restrictions:
-- A wildcard certificate must be provided.
-- The `SNI` config must be `[]` or left absent.
+Trojan-rust supports wildcard certificates.
 
 For example:
 ```
@@ -152,17 +150,17 @@ example.com ✔️
 a.example.com ❌
 other.com ❌
 
-// Not yet supported
-SAN in cert: *.example.com, example.com
-SNI: ["*.example.com"] 
-example.com ❌
-a.example.com ❌ 
-other.com ❌
-
 SAN in cert: *.example.com
 SNI: ["a.example.com"] 
 a.example.com ✔️
 b.example.com ❌
+other.com ❌
+
+SAN in cert: *.example.com, example.com
+SNI: ["*.example.com"] 
+a.example.com ✔️
+b.example.com ✔️
+example.com ❌
 other.com ❌
 ```
 
@@ -182,7 +180,7 @@ Trojan-rust DOES NOT offer a method adding or removing a user. Please do it by y
 - [ ] Client mode
 - [ ] TPROXY mode
 - [ ] Benchmarks
-- [ ] Wildcards in SNI config
+- [x] Wildcards in SNI config
 
 ## Contributing
 PRs welcome

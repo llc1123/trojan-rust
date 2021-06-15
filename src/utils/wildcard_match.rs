@@ -1,4 +1,4 @@
-pub fn is_match(input: &str, pattern: &str) -> bool {
+fn is_match(input: &str, pattern: &str) -> bool {
     let mut input = input.chars().rev().map(|c| c.to_ascii_lowercase());
     let mut pattern = pattern.chars().rev().map(|c| c.to_ascii_lowercase());
 
@@ -31,4 +31,13 @@ pub fn is_match(input: &str, pattern: &str) -> bool {
         }
     }
     true
+}
+
+pub fn has_match<'a>(input: &'a str, pattern_iter: impl Iterator<Item = &'a String>) -> bool {
+    for pattern in pattern_iter {
+        if is_match(input, pattern) {
+            return true;
+        }
+    }
+    false
 }
