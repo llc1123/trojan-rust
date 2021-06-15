@@ -1,3 +1,7 @@
+## 1.2.3
+- Bugfix
+- Drop acl blocked udp packet
+
 ## 1.2.2
 - Workaround for Sink::with bug which will cause panic on udp.
 
