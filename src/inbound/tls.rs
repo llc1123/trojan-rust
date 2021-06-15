@@ -1,4 +1,7 @@
-use crate::{common::AsyncStream, utils::config::Tls};
+use crate::{
+    common::AsyncStream,
+    utils::{config::Tls, wildcard_match},
+};
 use anyhow::{anyhow, bail, Context, Result};
 use futures::TryFutureExt;
 use log::{debug, info, trace};
@@ -32,10 +35,9 @@ fn get_alt_names_from_ssl_context(context: &SslContext) -> Option<Vec<String>> {
     None
 }
 
-// TODO: match wildcard sni
 fn sni_match(hostname: &String, sni_list: &Vec<String>) -> bool {
     for name in sni_list {
-        if *hostname == *name {
+        if wildcard_match::is_match(hostname, name) {
             return true;
         }
     }

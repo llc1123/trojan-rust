@@ -159,10 +159,11 @@ example.com ❌
 a.example.com ❌ 
 other.com ❌
 
-// Not yet supported
 SAN in cert: *.example.com
 SNI: ["a.example.com"] 
-Error on startup
+a.example.com ✔️
+b.example.com ❌
+other.com ❌
 ```
 
 ## Redis Auth
