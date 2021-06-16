@@ -1,3 +1,7 @@
+## 1.3.0
+- Fully support sni wildcard matching
+- Bugfix
+
 ## 1.2.3
 - Bugfix
 - Drop acl blocked udp packet
