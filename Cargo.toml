@@ -37,7 +37,7 @@ bytes = "1.0.1"
 async-trait = "0.1.50"
 sha2 = "0.9.5"
 hex = "0.4.3"
-redis = { version = "0.20.0", features = ["tokio-comp"] }
+redis = { version = "0.20.0", features = ["tokio-comp", "connection-manager"] }
 tokio-openssl = "0.6.1"
 openssl = { version = "0.10.34", features = ["vendored"] }
 tokio-io-timeout = "1.1.1"

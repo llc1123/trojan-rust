@@ -24,6 +24,7 @@ impl AuthHub {
         if let Some(redis) = &config.redis {
             redis_auth = Some(
                 RedisAuthenticator::new(&redis.server)
+                    .await
                     .context(format!("Unable to connect redis server {}", &redis.server))?,
             );
         }
