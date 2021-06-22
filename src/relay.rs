@@ -8,6 +8,7 @@ use futures::{SinkExt, StreamExt, TryStreamExt};
 use log::error;
 use log::{info, warn};
 use std::{sync::Arc, time::Duration};
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
 use tokio::{io::copy_bidirectional, pin, select, time::timeout};
@@ -40,11 +41,16 @@ where
                 copy_bidirectional(&mut stream, &mut target)
                     .await
                     .map_err(|_| anyhow!("Connection reset by peer."))?;
+                stream.shutdown().await?;
+                target.shutdown().await?;
             }
             InboundRequest::UdpBind { addr, stream } => {
                 let target = outbound.udp_bind(&addr).await?;
+                pin!(target, stream);
                 info!("UDP tunnel created.");
-                handle_udp(stream, target).await?;
+                handle_udp(&mut stream, &mut target).await?;
+                stream.close().await?;
+                target.close().await?;
             }
         }
         Ok(())
