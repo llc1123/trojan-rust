@@ -4,14 +4,16 @@ use crate::inbound::{Inbound, InboundAccept, InboundRequest};
 use crate::outbound::Outbound;
 use crate::utils::count_stream::CountStream;
 use anyhow::{anyhow, bail, Context, Error, Result};
-use futures::{SinkExt, StreamExt, TryStreamExt};
-use log::error;
-use log::{info, warn};
-use std::{sync::Arc, time::Duration};
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpListener;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver};
-use tokio::{io::copy_bidirectional, pin, select, time::timeout};
+use futures::{future::try_select, SinkExt, StreamExt, TryStreamExt};
+use log::{error, info, warn};
+use std::{io, sync::Arc, time::Duration};
+use tokio::{
+    io::{copy, split, AsyncRead, AsyncWrite, AsyncWriteExt},
+    net::TcpListener,
+    pin, select,
+    sync::mpsc::{unbounded_channel, UnboundedReceiver},
+    time::timeout,
+};
 use tokio_io_timeout::TimeoutStream;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 
@@ -23,6 +25,35 @@ pub struct Relay<I, O> {
     outbound: Arc<O>,
     tcp_nodelay: bool,
     pub tcp_timeout: Option<Duration>,
+}
+
+/// Connect two `TcpStream`. Unlike `copy_bidirectional`, it closes the other side once one side is done.
+pub async fn connect_tcp(
+    t1: impl AsyncRead + AsyncWrite,
+    t2: impl AsyncRead + AsyncWrite,
+) -> io::Result<()> {
+    let (mut read_1, mut write_1) = split(t1);
+    let (mut read_2, mut write_2) = split(t2);
+
+    let fut1 = async {
+        let r = copy(&mut read_1, &mut write_2).await;
+        write_2.shutdown().await?;
+        r
+    };
+    let fut2 = async {
+        let r = copy(&mut read_2, &mut write_1).await;
+        write_1.shutdown().await?;
+        r
+    };
+
+    pin!(fut1, fut2);
+
+    match try_select(fut1, fut2).await {
+        Ok(_) => {}
+        Err(e) => return Err(e.factor_first().0),
+    };
+
+    Ok(())
 }
 
 impl<I, O> Relay<I, O>
@@ -38,11 +69,9 @@ where
             InboundRequest::TcpConnect { addr, stream } => {
                 let target = outbound.tcp_connect(&addr).await?;
                 pin!(target, stream);
-                copy_bidirectional(&mut stream, &mut target)
+                connect_tcp(&mut stream, &mut target)
                     .await
-                    .map_err(|_| anyhow!("Connection reset by peer."))?;
-                stream.shutdown().await?;
-                target.shutdown().await?;
+                    .map_err(|e| anyhow!("Connection reset by peer. {:?}", e))?;
             }
             InboundRequest::UdpBind { addr, stream } => {
                 let target = outbound.udp_bind(&addr).await?;
