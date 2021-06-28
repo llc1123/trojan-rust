@@ -1,3 +1,8 @@
+## 1.4.0
+- Implement TCP tunnel properly
+- Handles redis connections properly
+- Reduce memory usage
+
 ## 1.3.0
 - Fully support sni wildcard matching
 - Bugfix
