@@ -1,8 +1,9 @@
-pub mod direct;
-
 use crate::common::{AsyncStream, BoxedUdpStream, UdpStream};
 use async_trait::async_trait;
 use std::io;
+
+pub mod direct;
+pub mod trojan;
 
 #[async_trait]
 pub trait Outbound: Send + Sync {

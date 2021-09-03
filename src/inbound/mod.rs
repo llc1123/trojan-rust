@@ -1,9 +1,10 @@
-pub mod tls;
-pub mod trojan;
-
 use crate::common::{AsyncStream, UdpStream};
 use async_trait::async_trait;
 use std::{io, net::SocketAddr};
+
+pub mod socks5;
+pub mod tls;
+pub mod trojan;
 
 pub enum InboundRequest<T, U> {
     TcpConnect { addr: String, stream: T },
@@ -24,6 +25,7 @@ pub trait Inbound: Send + Sync {
         &self,
         stream: AcceptedStream,
         addr: SocketAddr,
+        local_addr: SocketAddr,
     ) -> io::Result<Option<InboundAccept<Self::Metadata, Self::TcpStream, Self::UdpSocket>>>
     where
         AcceptedStream: AsyncStream + Unpin + 'static;

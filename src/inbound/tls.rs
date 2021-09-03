@@ -1,6 +1,6 @@
 use crate::{
     common::AsyncStream,
-    utils::{config::Tls, wildcard_match},
+    utils::{config::server::Tls, wildcard_match},
 };
 use anyhow::{anyhow, bail, Context, Result};
 use futures::TryFutureExt;

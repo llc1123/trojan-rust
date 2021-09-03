@@ -103,11 +103,7 @@ impl PacketStat {
     }
 }
 
-impl<I, O> Relay<I, O>
-where
-    I: Inbound<Metadata = String> + 'static,
-    O: Outbound + 'static,
-{
+impl<I, O> Relay<I, O> {
     pub fn new(listener: TcpListener, inbound: I, outbound: O, tcp_nodelay: bool) -> Self {
         Relay {
             listener,
@@ -117,11 +113,19 @@ where
             tcp_timeout: None,
         }
     }
+}
+
+impl<I, O> Relay<I, O>
+where
+    I: Inbound<Metadata = String> + 'static,
+    O: Outbound + 'static,
+{
     pub async fn serve_trojan(&self, auth: Arc<dyn Auth>) -> Result<()> {
         let (tx, rx) = unbounded_channel::<PacketStat>();
         tokio::spawn(stat(auth, rx));
         loop {
             let (stream, addr) = self.listener.accept().await?;
+            let local_addr = stream.local_addr()?;
             info!("Inbound connection from {}", addr);
             stream
                 .set_nodelay(self.tcp_nodelay)
@@ -135,7 +139,7 @@ where
             let outbound = self.outbound.clone();
             let t = tx.clone();
             tokio::spawn(async move {
-                let inbound_accept = inbound.accept(Box::pin(stream), addr).await?;
+                let inbound_accept = inbound.accept(Box::pin(stream), addr, local_addr).await?;
                 if let Some(accept) = inbound_accept {
                     // Here we got trojan password
 
@@ -146,6 +150,38 @@ where
                                 .ok();
                         }))
                         .ok();
+                    if let Err(e) = Self::process(outbound, accept).await {
+                        warn!("Relay error: {:?}", e)
+                    }
+                }
+                Ok(()) as Result<()>
+            });
+        }
+    }
+}
+
+impl<I, O> Relay<I, O>
+where
+    I: Inbound<Metadata = ()> + 'static,
+    O: Outbound + 'static,
+{
+    pub async fn serve_socks5(&self) -> Result<()> {
+        loop {
+            let (stream, addr) = self.listener.accept().await?;
+            let local_addr = stream.local_addr()?;
+            info!("Inbound connection from {}", addr);
+            stream
+                .set_nodelay(self.tcp_nodelay)
+                .context("Set TCP_NODELAY failed")?;
+
+            let mut stream = TimeoutStream::new(stream);
+            stream.set_read_timeout(self.tcp_timeout);
+
+            let inbound = self.inbound.clone();
+            let outbound = self.outbound.clone();
+            tokio::spawn(async move {
+                let inbound_accept = inbound.accept(Box::pin(stream), addr, local_addr).await?;
+                if let Some(accept) = inbound_accept {
                     if let Err(e) = Self::process(outbound, accept).await {
                         warn!("Relay error: {:?}", e)
                     }

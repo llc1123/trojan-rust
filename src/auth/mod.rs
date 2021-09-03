@@ -2,7 +2,7 @@ pub mod from_config;
 pub mod redis;
 
 use self::{from_config::ConfigAuthenticator, redis::RedisAuthenticator};
-use crate::utils::config::Config;
+use crate::utils::config::ServerConfig;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 
@@ -18,7 +18,7 @@ pub struct AuthHub {
 }
 
 impl AuthHub {
-    pub async fn new(config: &Config) -> Result<AuthHub> {
+    pub async fn new(config: &ServerConfig) -> Result<AuthHub> {
         let config_auth = ConfigAuthenticator::new(config.trojan.password.clone())?;
         let mut redis_auth: Option<RedisAuthenticator> = None;
         if let Some(redis) = &config.redis {

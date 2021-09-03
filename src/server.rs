@@ -5,13 +5,13 @@ use crate::{
     inbound::{tls::TlsContext, trojan::TrojanInbound},
     outbound::direct::DirectOutbound,
     relay::Relay,
-    utils::{acl::ACL, config::Config},
+    utils::{acl::ACL, config::ServerConfig},
 };
 use anyhow::{Context, Result};
 use log::{debug, info};
 use tokio::net::TcpListener;
 
-pub async fn start(config: Config) -> Result<()> {
+pub async fn start(config: ServerConfig) -> Result<()> {
     debug!("Loading Config: {:?}", &config);
 
     let listener = TcpListener::bind(&config.tls.listen.as_str())
