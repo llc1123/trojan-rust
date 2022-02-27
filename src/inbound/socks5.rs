@@ -1,125 +1,56 @@
 use std::{
     io::{self, Read},
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4},
-    pin::Pin,
-    str::FromStr,
+    net::SocketAddr,
     task::{Context, Poll},
 };
 
+use anyhow::Result;
 use async_trait::async_trait;
-use bytes::Bytes;
-use futures::{ready, Sink, Stream};
+use futures::ready;
 use socks5_protocol::{
     sync::FromIO, Address, AuthMethod, AuthRequest, AuthResponse, Command, CommandRequest,
     CommandResponse, Error, Version,
 };
 use tokio::{
-    io::{split, AsyncWriteExt, BufWriter, ReadBuf},
-    net::UdpSocket,
+    io::ReadBuf,
+    net::{TcpListener, TcpStream},
+    sync::mpsc::Sender,
 };
 
-use crate::common::{AsyncStream, BoxedStream, UdpPacket};
+use crate::{common::AsyncUdp, config, outbound::Outbound};
 
-use super::{Inbound, InboundAccept, InboundRequest};
+use super::{Inbound, InboundRequest};
 
-pub struct Socks5Inbound {}
+pub struct Socks5Inbound<T> {
+    bind: String,
+    outbound: T,
+}
 
-impl Socks5Inbound {
-    pub fn new() -> Self {
-        Socks5Inbound {}
+impl<T> Socks5Inbound<T> {
+    pub fn new(outbound: T, config: config::Socks5Inbound) -> Self {
+        Socks5Inbound {
+            bind: config.bind,
+            outbound,
+        }
     }
 }
 
 #[async_trait]
-impl Inbound for Socks5Inbound {
-    type Metadata = ();
-    type TcpStream = BoxedStream;
-    type UdpSocket = Socks5UdpSocket;
+impl<T> Inbound<T> for Socks5Inbound<T>
+where
+    T: Outbound,
+{
+    type TcpStream = T::TcpStream;
+    type UdpSocket = Socks5UdpSocket<T::UdpSocket>;
 
-    async fn accept<AcceptedStream>(
-        &self,
-        stream: AcceptedStream,
-        _addr: SocketAddr,
-        mut local_addr: SocketAddr,
-    ) -> io::Result<Option<InboundAccept<Self::Metadata, Self::TcpStream, Self::UdpSocket>>>
-    where
-        AcceptedStream: AsyncStream + Unpin + 'static,
-    {
-        let default_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0));
-        let (mut rx, tx) = split(stream);
-        let mut tx = BufWriter::with_capacity(512, tx);
-
-        let version = Version::read(&mut rx).await.map_err(Error::to_io_err)?;
-        let auth_req = AuthRequest::read(&mut rx).await.map_err(Error::to_io_err)?;
-
-        let method = auth_req.select_from(&[AuthMethod::Noauth]);
-        let auth_resp = AuthResponse::new(method);
-
-        // TODO: do auth here
-
-        version.write(&mut tx).await.map_err(Error::to_io_err)?;
-        auth_resp.write(&mut tx).await.map_err(Error::to_io_err)?;
-        tx.flush().await?;
-
-        let cmd_req = CommandRequest::read(&mut rx)
-            .await
-            .map_err(Error::to_io_err)?;
-
-        let accept = match cmd_req.command {
-            Command::Connect => {
-                CommandResponse::success(default_addr.into())
-                    .write(&mut tx)
-                    .await
-                    .map_err(Error::to_io_err)?;
-                tx.flush().await?;
-
-                let socket = rx.unsplit(tx.into_inner());
-                InboundAccept {
-                    metadata: (),
-                    request: InboundRequest::TcpConnect {
-                        addr: cmd_req.address.to_string(),
-                        stream: Box::pin(socket) as BoxedStream,
-                    },
-                }
-            }
-            Command::UdpAssociate => {
-                let bind_addr = match cmd_req.address {
-                    Address::SocketAddr(SocketAddr::V4(_)) => {
-                        SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-                    }
-                    Address::SocketAddr(SocketAddr::V6(_)) => {
-                        SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
-                    }
-                    _ => return Ok(None),
-                };
-                let udp = UdpSocket::bind(bind_addr).await?;
-                local_addr.set_port(udp.local_addr()?.port());
-
-                CommandResponse::success(local_addr.into())
-                    .write(&mut tx)
-                    .await
-                    .map_err(Error::to_io_err)?;
-                tx.flush().await?;
-                let socket = rx.unsplit(tx.into_inner());
-                InboundAccept {
-                    metadata: (),
-                    request: InboundRequest::UdpBind {
-                        addr: "0.0.0.0:0".to_string(),
-                        stream: Socks5UdpSocket {
-                            udp,
-                            _tcp: Box::pin(socket),
-                            endpoint: None,
-                            buf: vec![0u8; 2048],
-                            send_buf: None,
-                        },
-                    },
-                }
-            }
-            _ => {
-                return Ok(None);
-            }
-        };
-        Ok(Some(accept))
+    async fn run(
+        &mut self,
+        sender: Sender<InboundRequest<Self::TcpStream, Self::UdpSocket>>,
+    ) -> Result<()> {
+        let listener = TcpListener::bind(self.bind).await?;
+        loop {
+            listener.accept().await?;
+        }
     }
 }
 
@@ -157,18 +88,23 @@ pub fn pack_udp(addr: Address, buf: &[u8]) -> io::Result<Vec<u8>> {
     Ok(cursor.into_inner())
 }
 
-pub struct Socks5UdpSocket {
-    udp: UdpSocket,
-    _tcp: BoxedStream,
+pub struct Socks5UdpSocket<U> {
+    udp: U,
+    _tcp: TcpStream,
     endpoint: Option<SocketAddr>,
     buf: Vec<u8>,
-    send_buf: Option<Vec<u8>>,
+    send_buf: Vec<u8>,
 }
 
-impl Stream for Socks5UdpSocket {
-    type Item = io::Result<UdpPacket>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+impl<U> AsyncUdp for Socks5UdpSocket<U>
+where
+    U: AsyncUdp,
+{
+    fn poll_recv_from(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<SocketAddr>> {
         let Socks5UdpSocket {
             udp, endpoint, buf, ..
         } = &mut *self;
@@ -180,55 +116,56 @@ impl Stream for Socks5UdpSocket {
 
         let (addr, payload) = parse_udp(&buf.filled())?;
 
-        Poll::Ready(Some(Ok((
-            Bytes::copy_from_slice(payload),
-            addr.to_string(),
-        ))))
-    }
-}
+        let to_copy = buf.remaining().min(payload.len());
+        buf.initialize_unfilled_to(to_copy)
+            .copy_from_slice(&payload[..to_copy]);
+        buf.advance(to_copy);
 
-impl Sink<UdpPacket> for Socks5UdpSocket {
-    type Error = io::Error;
-
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.poll_flush(cx)
-    }
-
-    fn start_send(
-        mut self: Pin<&mut Self>,
-        (bytes, send_to): UdpPacket,
-    ) -> Result<(), Self::Error> {
-        let saddr = Address::from_str(&send_to).map_err(|e| e.to_io_err())?;
-
-        let bytes = pack_udp(saddr, &bytes)?;
-
-        self.send_buf = Some(bytes);
-
-        Ok(())
+        let addr = match addr {
+            Address::SocketAddr(s) => s,
+            _ => {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "unsupported address type",
+                )))
+            }
+        };
+        Poll::Ready(Ok(addr))
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_send_to(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        addr: SocketAddr,
+    ) -> Poll<io::Result<usize>> {
         let Socks5UdpSocket {
-            send_buf,
-            endpoint,
             udp,
+            endpoint,
+            send_buf,
             ..
         } = &mut *self;
 
-        match (&send_buf, endpoint) {
-            (Some(buf), Some(endpoint)) => {
-                ready!(udp.poll_send_to(cx, &buf, *endpoint))?;
+        if send_buf.is_empty() {
+            let saddr = Address::from(addr);
+
+            let bytes = pack_udp(saddr, buf)?;
+            *send_buf = bytes;
+        }
+
+        match endpoint {
+            Some(endpoint) => {
+                ready!(udp.poll_send_to(cx, &send_buf, *endpoint))?;
+                send_buf.clear();
             }
-            // drop the packet
-            _ => (),
-        };
+            None => {
+                return Poll::Ready(Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "udp endpoint not set",
+                )))
+            }
+        }
 
-        *send_buf = None;
-
-        Poll::Ready(Ok(()))
-    }
-
-    fn poll_close(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+        Poll::Ready(Ok(buf.len()))
     }
 }

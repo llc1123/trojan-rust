@@ -1,19 +1,17 @@
 #![feature(ip)]
 
 mod auth;
-mod client;
 mod common;
+mod config;
 mod inbound;
 mod outbound;
-mod relay;
-mod server;
 mod trojan;
 mod utils;
 
 use anyhow::{Context, Result};
 use clap::{AppSettings, Clap};
 use log::error;
-use utils::{config, logger};
+use utils::logger;
 
 #[derive(Clap)]
 #[clap(version, author, about)]
@@ -27,19 +25,6 @@ struct Opts {
 
 async fn start(config: &str) -> Result<()> {
     let config = config::load(config).context("Failed to parse config")?;
-
-    match config {
-        config::Config::Server(server_config) => {
-            server::start(server_config)
-                .await
-                .context("Failed to start service")?;
-        }
-        config::Config::Client(client_config) => {
-            client::start(client_config)
-                .await
-                .context("Failed to start client")?;
-        }
-    }
 
     Ok(())
 }

@@ -1,23 +1,32 @@
-use super::{tls::TlsContext, Inbound, InboundAccept, InboundRequest};
-use crate::trojan::UdpCodec;
+use super::{tls::TlsContext, Inbound, InboundRequest};
+use crate::common::UdpStream;
 use crate::{
     auth::Auth,
-    common::{AsyncStream, BoxedStream, BoxedUdpStream},
+    common::{AsyncTcp, AsyncUdp, BoxTcpStream, TcpStream},
+    config::server::Trojan,
     inbound::tls::TlsAccept,
-    utils::{config::server::Trojan, peekable_stream::PeekableStream},
+    outbound::Outbound,
+    trojan::TrojanUdp,
+    utils::peekable_stream::PeekableStream,
 };
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Context as ErrContext, Result};
 use async_trait::async_trait;
 use bytes::Buf;
 use fallback::FallbackAcceptor;
+use futures::{ready, SinkExt, StreamExt};
 use log::{info, warn};
 use socks5_protocol::{sync::FromIO, Address};
 use std::{
     io::{self, Cursor},
     net::SocketAddr,
     sync::Arc,
+    task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite, ReadBuf},
+    net::TcpListener,
+    sync::mpsc::Sender,
+};
 use tokio_util::codec::Framed;
 
 mod fallback;
@@ -26,13 +35,17 @@ const CMD: usize = 58;
 const ATYP: usize = 59;
 const DOMAIN_LEN: usize = 60;
 
+type Request<IO> = InboundRequest<BoxTcpStream, TrojanUdp<PeekableStream<IO>>>;
+
 pub enum Cmd {
-    Connect(String),
-    UdpAssociate,
+    Connect(Address),
+    UdpAssociate(Address),
 }
 
-pub struct TrojanInbound {
-    auth_hub: Arc<dyn Auth>,
+pub struct TrojanInbound<T> {
+    outbound: T,
+    auth: Arc<dyn Auth>,
+    bind: String,
     tls_context: TlsContext,
     fallback_acceptor: FallbackAcceptor,
 }
@@ -42,24 +55,55 @@ fn map_err(e: anyhow::Error) -> io::Error {
 }
 
 #[async_trait]
-impl Inbound for TrojanInbound {
-    type Metadata = String;
-    type TcpStream = BoxedStream;
-    type UdpSocket = BoxedUdpStream;
+impl<T> Inbound<T> for TrojanInbound<T>
+where
+    T: Outbound,
+{
+    type TcpStream = BoxTcpStream;
+    type UdpSocket = UdpStream;
 
-    async fn accept<AcceptedStream>(
-        &self,
-        stream: AcceptedStream,
-        _addr: SocketAddr,
-        _local_addr: SocketAddr,
-    ) -> io::Result<Option<InboundAccept<Self::Metadata, Self::TcpStream, Self::UdpSocket>>>
+    async fn run(
+        &mut self,
+        sender: Sender<InboundRequest<Self::TcpStream, Self::UdpSocket>>,
+    ) -> Result<()> {
+        let listener = TcpListener::bind(&self.bind).await?;
+
+        loop {
+            let (stream, from_addr) = listener.accept().await?;
+        }
+    }
+}
+
+impl<O> TrojanInbound<O>
+where
+    O: Outbound,
+{
+    pub async fn new(
+        outbound: O,
+        auth: Arc<dyn Auth>,
+        tls_context: TlsContext,
+        config: Trojan,
+    ) -> Result<Self> {
+        let fallback_acceptor = FallbackAcceptor::new(config.fallback)
+            .await
+            .context("Failed to setup fallback server.")?;
+        Ok(TrojanInbound {
+            outbound,
+            bind: config.bind,
+            auth,
+            tls_context,
+            fallback_acceptor,
+        })
+    }
+
+    async fn accept<T>(&self, stream: T) -> Result<BoxTcpStream>
     where
-        AcceptedStream: AsyncStream + Unpin + 'static,
+        T: AsyncTcp + Send + Sync + Unpin,
     {
         let TlsAccept {
             stream,
             sni_matched,
-        } = self.tls_context.accept(stream).await.map_err(map_err)?;
+        } = self.tls_context.accept(stream).await?;
 
         if sni_matched {
             match self.accept2(stream).await {
@@ -81,46 +125,20 @@ impl Inbound for TrojanInbound {
             Ok(None)
         }
     }
-}
 
-impl TrojanInbound {
-    pub async fn new(
-        auth: Arc<dyn Auth>,
-        tls_context: TlsContext,
-        config: Trojan,
-    ) -> Result<TrojanInbound> {
-        let fallback_acceptor = FallbackAcceptor::new(config.fallback)
-            .await
-            .context("Failed to setup fallback server.")?;
-        Ok(TrojanInbound {
-            auth_hub: auth,
-            tls_context,
-            fallback_acceptor,
-        })
-    }
-
-    pub async fn accept2<IO>(
-        &self,
-        stream: IO,
-    ) -> Result<InboundAccept<String, BoxedStream, BoxedUdpStream>, PeekableStream<IO>>
+    pub async fn accept2<IO>(&self, stream: IO) -> Result<Request<IO>, PeekableStream<IO>>
     where
-        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IO: AsyncRead + AsyncWrite + Unpin + Send + Sync + 'static,
     {
         let mut stream = PeekableStream::new(stream);
-        match self.inner_accept(&mut stream).await {
-            Ok((Cmd::Connect(addr), pw)) => Ok(InboundAccept {
-                metadata: pw,
-                request: InboundRequest::TcpConnect {
-                    addr,
-                    stream: Box::pin(stream),
-                },
+        match self.accept_trojan(&mut stream).await {
+            Ok((Cmd::Connect(addr), pw)) => Ok(InboundRequest::TcpConnect {
+                addr: addr.into(),
+                stream: TcpStream::boxed(stream),
             }),
-            Ok((Cmd::UdpAssociate, pw)) => Ok(InboundAccept {
-                metadata: pw,
-                request: InboundRequest::UdpBind {
-                    addr: "0.0.0.0:0".to_string(),
-                    stream: Box::pin(Framed::new(stream, UdpCodec::new(None))),
-                },
+            Ok((Cmd::UdpAssociate(addr), pw)) => Ok(InboundRequest::UdpBind {
+                addr: addr.into(),
+                stream: TrojanUdp::new(stream, None),
             }),
             Err(e) => {
                 warn!("Redirect to fallback: {:?}", e);
@@ -129,7 +147,7 @@ impl TrojanInbound {
         }
     }
 
-    async fn inner_accept<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<(Cmd, String)>
+    async fn accept_trojan<IO>(&self, stream: &mut PeekableStream<IO>) -> Result<(Cmd, String)>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
@@ -140,7 +158,7 @@ impl TrojanInbound {
         if let Err(_) = hex::decode(password.as_ref()) {
             bail!("Not trojan request.")
         }
-        if !self.auth_hub.auth(&password).await? {
+        if !self.auth.auth(&password).await? {
             bail!("{}", &password)
         }
         let password = password.to_string();
@@ -160,8 +178,8 @@ impl TrojanInbound {
         stream.drain(end as usize).await?;
 
         Ok(match cmd {
-            1 => (Cmd::Connect(address.to_string()), password),
-            3 => (Cmd::UdpAssociate, password),
+            1 => (Cmd::Connect(address), password),
+            3 => (Cmd::UdpAssociate(address), password),
             _ => bail!("Unknown command."),
         })
     }

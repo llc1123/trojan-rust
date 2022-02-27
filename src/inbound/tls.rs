@@ -1,6 +1,7 @@
 use crate::{
-    common::AsyncStream,
-    utils::{config::server::Tls, wildcard_match},
+    common::{AsyncTcp, TcpStream},
+    config::server::Tls,
+    utils::wildcard_match,
 };
 use anyhow::{anyhow, bail, Context, Result};
 use futures::TryFutureExt;
@@ -80,8 +81,11 @@ impl TlsContext {
         })
     }
 
-    pub async fn accept<S: AsyncStream + Unpin>(&self, stream: S) -> Result<TlsAccept<S>> {
-        let mut stream = SslStream::new(Ssl::new(&self.inner)?, stream)?;
+    pub async fn accept<S>(&self, stream: S) -> Result<TlsAccept<TcpStream<S>>>
+    where
+        S: AsyncTcp + Send + Sync + Unpin,
+    {
+        let mut stream = SslStream::new(Ssl::new(&self.inner)?, TcpStream(stream))?;
         Pin::new(&mut stream)
             .accept()
             .await

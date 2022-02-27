@@ -1,5 +1,3 @@
-cargo-features = ["strip"]
-
 [package]
 name = "trojan-rust"
 version = "1.4.0"

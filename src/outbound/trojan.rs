@@ -1,16 +1,15 @@
 use std::io::{self, Cursor};
 
-use crate::{trojan::UdpCodec, utils::config::client::TrojanServer};
+use crate::{common::Address, config::client::TrojanServer, trojan::TrojanUdp};
 
 use self::tcp::TrojanTcp;
-use super::{BoxedUdpStream, Outbound};
+use super::Outbound;
 use anyhow::Result;
 use async_trait::async_trait;
 use log::info;
 use sha2::{Digest, Sha224};
-use socks5_protocol::{sync::FromIO, Address};
+use socks5_protocol::sync::FromIO;
 use tokio::net::TcpStream;
-use tokio_util::codec::Framed;
 
 mod tcp;
 mod tls;
@@ -36,7 +35,7 @@ impl TrojanOutbound {
 
 impl TrojanOutbound {
     // cmd 1 for Connect, 3 for Udp associate
-    fn make_head(&self, cmd: u8, addr: Address) -> io::Result<Vec<u8>> {
+    fn make_head(&self, cmd: u8, addr: socks5_protocol::Address) -> io::Result<Vec<u8>> {
         use std::io::Write;
 
         let head = Vec::<u8>::new();
@@ -56,37 +55,27 @@ impl TrojanOutbound {
 #[async_trait]
 impl Outbound for TrojanOutbound {
     type TcpStream = TrojanTcp;
-    type UdpSocket = BoxedUdpStream;
+    type UdpSocket = TrojanUdp<tls::TlsStream<TcpStream>>;
 
-    async fn tcp_connect(&self, address: &str) -> io::Result<Self::TcpStream> {
+    async fn tcp_connect(&self, address: &Address) -> io::Result<Self::TcpStream> {
         info!("Connecting to target {}", address);
         let inner = TcpStream::connect(&self.config.server).await?;
 
         let stream = self.connector.connect(inner).await?;
-        let head = self.make_head(
-            1,
-            address
-                .parse()
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?,
-        )?;
+        let head = self.make_head(1, address.to_socks5_addr())?;
 
         let tcp = TrojanTcp::new(stream, head);
 
         Ok(tcp)
     }
 
-    async fn udp_bind(&self, address: &str) -> io::Result<Self::UdpSocket> {
+    async fn udp_bind(&self, address: &Address) -> io::Result<Self::UdpSocket> {
         info!("Connecting to target {}", address);
         let inner = TcpStream::connect(&self.config.server).await?;
 
         let stream = self.connector.connect(inner).await?;
-        let head = self.make_head(
-            3,
-            address
-                .parse()
-                .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?,
-        )?;
+        let head = self.make_head(3, address.to_socks5_addr())?;
 
-        Ok(Box::pin(Framed::new(stream, UdpCodec::new(head))))
+        Ok(TrojanUdp::new(stream, head))
     }
 }

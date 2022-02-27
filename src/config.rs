@@ -21,10 +21,6 @@ pub fn load(s: &str) -> Result<Config> {
 pub(crate) mod client {
     use serde_derive::Deserialize;
 
-    fn default_bind() -> String {
-        String::from("127.0.0.1:1080")
-    }
-
     #[derive(Deserialize, Debug)]
     pub struct TrojanServer {
         /// hostname:port
@@ -45,8 +41,8 @@ pub(crate) mod client {
 
     #[derive(Deserialize, Debug)]
     pub struct Config {
-        #[serde(default = "default_bind")]
-        pub bind: String,
+        #[serde(flatten)]
+        pub socks5: super::Socks5Inbound,
         #[serde(default)]
         pub tcp_nodelay: bool,
 
@@ -70,6 +66,7 @@ pub(crate) mod server {
 
     #[derive(Deserialize, Debug, Default)]
     pub struct Trojan {
+        pub bind: String,
         #[serde(default)]
         pub password: Vec<String>,
         #[serde(default)]
@@ -85,8 +82,6 @@ pub(crate) mod server {
     pub struct Tls {
         #[serde(default = "default_listen")]
         pub listen: String,
-        #[serde(default)]
-        pub tcp_nodelay: bool,
         #[serde(default)]
         #[serde_as(deserialize_as = "OneOrMany<_, PreferMany>")]
         pub sni: Vec<String>,
@@ -109,4 +104,14 @@ pub(crate) mod server {
         #[serde(default = "default_redis")]
         pub server: String,
     }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct Socks5Inbound {
+    #[serde(default = "default_bind")]
+    pub bind: String,
+}
+
+fn default_bind() -> String {
+    String::from("127.0.0.1:1080")
 }

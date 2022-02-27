@@ -2,7 +2,7 @@ pub mod from_config;
 pub mod redis;
 
 use self::{from_config::ConfigAuthenticator, redis::RedisAuthenticator};
-use crate::utils::config::ServerConfig;
+use crate::config::ServerConfig;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 

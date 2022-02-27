@@ -1,24 +1,30 @@
-use crate::common::UdpPacket;
 use anyhow::Result;
 use bytes::{Buf, BufMut, BytesMut};
+use futures::{ready, SinkExt, StreamExt};
 use socks5_protocol::{sync::FromIO, Address};
 use std::{
     io::{self, Write},
-    str::FromStr,
+    net::SocketAddr,
+    task::{Context, Poll},
 };
-use tokio_util::codec::{Decoder, Encoder};
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio_util::codec::{Decoder, Encoder, Framed};
+
+use crate::common::AsyncUdp;
 
 const UDP_MAX_SIZE: usize = 65535;
 // 259 is max size of address, atype 1 + domain len 1 + domain 255 + port 2
 const PREFIX_LENGTH: usize = 259 + 2 + 2;
 
-pub struct UdpCodec(Option<Vec<u8>>);
+struct UdpCodec(Option<Vec<u8>>);
 
 impl UdpCodec {
-    pub fn new(head: impl Into<Option<Vec<u8>>>) -> UdpCodec {
+    fn new(head: impl Into<Option<Vec<u8>>>) -> UdpCodec {
         UdpCodec(head.into())
     }
 }
+
+type UdpPacket = (Vec<u8>, Address);
 
 impl Encoder<UdpPacket> for UdpCodec {
     type Error = io::Error;
@@ -37,10 +43,7 @@ impl Encoder<UdpPacket> for UdpCodec {
         if let Some(head) = self.0.take() {
             writer.write_all(&head)?;
         }
-        Address::from_str(&item.1)
-            .map_err(|e| e.to_io_err())?
-            .write_to(&mut writer)
-            .map_err(|e| e.to_io_err())?;
+        item.1.write_to(&mut writer).map_err(|e| e.to_io_err())?;
         let dst = writer.into_inner();
 
         dst.put_u16(item.0.len() as u16);
@@ -92,6 +95,68 @@ impl Decoder for UdpCodec {
 
         src.copy_to_slice(&mut buf);
 
-        Ok(Some((buf.into(), address.to_string())))
+        Ok(Some((buf.into(), address)))
+    }
+}
+
+pub struct TrojanUdp<S> {
+    framed: Framed<S, UdpCodec>,
+    flushing: bool,
+}
+
+impl<S> TrojanUdp<S>
+where
+    S: AsyncRead + AsyncWrite,
+{
+    pub fn new(stream: S, head: impl Into<Option<Vec<u8>>>) -> Self {
+        Self {
+            framed: Framed::new(stream, UdpCodec::new(None)),
+            flushing: false,
+        }
+    }
+}
+
+impl<S> AsyncUdp for TrojanUdp<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    fn poll_recv_from(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<SocketAddr>> {
+        let (bytes, from) = match ready!(self.framed.poll_next_unpin(cx)) {
+            Some(r) => r?,
+            None => return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into())),
+        };
+
+        let to_copy = bytes.len().min(buf.remaining());
+        buf.initialize_unfilled_to(to_copy)
+            .copy_from_slice(&bytes[..to_copy]);
+        buf.advance(to_copy);
+
+        let addr = match from {
+            socks5_protocol::Address::SocketAddr(addr) => addr,
+            _ => return Poll::Ready(Err(io::ErrorKind::InvalidData.into())),
+        };
+        Poll::Ready(Ok(addr))
+    }
+
+    fn poll_send_to(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        addr: SocketAddr,
+    ) -> Poll<io::Result<usize>> {
+        loop {
+            if self.flushing {
+                ready!(self.framed.poll_flush_unpin(cx))?;
+                self.flushing = false;
+                return Poll::Ready(Ok(buf.len()));
+            }
+            ready!(self.framed.poll_ready_unpin(cx))?;
+            self.framed.start_send_unpin((buf.to_vec(), addr.into()))?;
+            self.flushing = true;
+        }
     }
 }

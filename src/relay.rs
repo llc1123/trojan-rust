@@ -1,6 +1,6 @@
 use crate::auth::Auth;
 use crate::common::UdpStream;
-use crate::inbound::{Inbound, InboundAccept, InboundRequest};
+use crate::inbound::{Inbound, InboundRequest};
 use crate::outbound::Outbound;
 use crate::utils::count_stream::CountStream;
 use anyhow::{anyhow, bail, Context, Error, Result};

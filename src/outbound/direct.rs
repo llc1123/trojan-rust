@@ -1,110 +1,68 @@
-use std::{future::ready, io, sync::Arc};
-
-use crate::{common::UdpPacket, utils::acl::ACL};
-
-use super::{BoxedUdpStream, Outbound};
-use anyhow::Result;
-use async_trait::async_trait;
-use bytes::{BufMut, Bytes, BytesMut};
-use futures::{stream, FutureExt, SinkExt, StreamExt};
-use log::{info, warn};
-use tokio::net::{lookup_host, TcpStream, UdpSocket};
-use tokio_util::{
-    codec::{Decoder, Encoder},
-    udp::UdpFramed,
+use std::{
+    io,
+    net::SocketAddr,
+    task::{Context, Poll},
 };
 
-pub struct BytesCodec(());
+use crate::common::{Address, AddressDomain, AsyncUdp};
 
-impl BytesCodec {
-    // Creates a new `BytesCodec` for shipping around raw bytes.
-    pub fn new() -> BytesCodec {
-        BytesCodec(())
-    }
-}
+use super::Outbound;
+use async_trait::async_trait;
+use tokio::{
+    io::ReadBuf,
+    net::{TcpStream, UdpSocket},
+};
 
-impl Decoder for BytesCodec {
-    type Item = Bytes;
-    type Error = io::Error;
-
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Bytes>, io::Error> {
-        if !buf.is_empty() {
-            let len = buf.len();
-            Ok(Some(buf.split_to(len).freeze()))
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-impl Encoder<Bytes> for BytesCodec {
-    type Error = io::Error;
-
-    fn encode(&mut self, data: Bytes, buf: &mut BytesMut) -> Result<(), io::Error> {
-        buf.reserve(data.len());
-        buf.put(data);
-        Ok(())
-    }
-}
-
-pub struct DirectOutbound {
-    acl: Arc<ACL>,
-}
+pub struct DirectOutbound {}
 
 impl DirectOutbound {
-    pub fn new(acl: ACL) -> Self {
-        DirectOutbound { acl: Arc::new(acl) }
+    pub fn new() -> Self {
+        DirectOutbound {}
     }
 }
 
 #[async_trait]
 impl Outbound for DirectOutbound {
     type TcpStream = TcpStream;
-    type UdpSocket = BoxedUdpStream;
+    type UdpSocket = Udp;
 
-    async fn tcp_connect(&self, address: &str) -> io::Result<Self::TcpStream> {
-        info!("Connecting to target {}", address);
-
-        let addrs = lookup_host(address).await?.filter(|addr| {
-            if self.acl.has_match(addr) {
-                warn!("ACL blocked: {}", &addr);
-                return false;
-            }
-            return true;
-        });
-
-        let mut last_err = None;
-
-        for addr in addrs {
-            match TcpStream::connect(addr).await {
-                Ok(stream) => return Ok(stream),
-                Err(e) => last_err = Some(e),
+    async fn tcp_connect(&self, addr: &Address) -> io::Result<Self::TcpStream> {
+        match addr {
+            Address::SocketAddr(addr) => TcpStream::connect(addr).await,
+            Address::Domain(AddressDomain(domain, port)) => {
+                TcpStream::connect((domain.as_ref(), *port)).await
             }
         }
-
-        Err(last_err.unwrap_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "could not resolve to any address",
-            )
-        }))
     }
 
-    async fn udp_bind(&self, address: &str) -> io::Result<Self::UdpSocket> {
-        let udp = UdpSocket::bind(address).await?;
-        let acl = self.acl.clone();
-        let stream = UdpFramed::new(udp, BytesCodec::new())
-            .map(|r| r.map(|(a, b)| (a, b.to_string())))
-            .with_flat_map(move |(buf, addr): UdpPacket| {
-                let acl = acl.clone();
-                stream::once(lookup_host(addr).map(move |r| {
-                    r.map(|mut i| i.next())
-                        .ok()
-                        .flatten()
-                        .and_then(|i| (!acl.has_match(&i)).then(|| Ok((buf, i))))
-                }))
-                .filter_map(|r| ready(r))
-            });
-        Ok(Box::pin(stream))
+    async fn udp_bind(&self, addr: &Address) -> io::Result<Self::UdpSocket> {
+        let udp = match addr {
+            Address::SocketAddr(addr) => UdpSocket::bind(addr).await,
+            Address::Domain(AddressDomain(domain, port)) => {
+                UdpSocket::bind((domain.as_ref(), *port)).await
+            }
+        }?;
+        Ok(Udp(udp))
+    }
+}
+
+struct Udp(UdpSocket);
+
+impl AsyncUdp for Udp {
+    fn poll_recv_from(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<SocketAddr>> {
+        self.0.poll_recv_from(cx, buf)
+    }
+
+    fn poll_send_to(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        addr: SocketAddr,
+    ) -> Poll<io::Result<usize>> {
+        self.0.poll_send_to(cx, buf, addr)
     }
 }
