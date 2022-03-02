@@ -42,8 +42,7 @@ pub enum Cmd {
     UdpAssociate(Address),
 }
 
-pub struct TrojanInbound<T> {
-    outbound: T,
+pub struct TrojanInbound {
     auth: Arc<dyn Auth>,
     bind: String,
     tls_context: TlsContext,
@@ -55,10 +54,7 @@ fn map_err(e: anyhow::Error) -> io::Error {
 }
 
 #[async_trait]
-impl<T> Inbound<T> for TrojanInbound<T>
-where
-    T: Outbound,
-{
+impl Inbound for TrojanInbound {
     type TcpStream = BoxTcpStream;
     type UdpSocket = UdpStream;
 
@@ -74,21 +70,12 @@ where
     }
 }
 
-impl<O> TrojanInbound<O>
-where
-    O: Outbound,
-{
-    pub async fn new(
-        outbound: O,
-        auth: Arc<dyn Auth>,
-        tls_context: TlsContext,
-        config: Trojan,
-    ) -> Result<Self> {
+impl TrojanInbound {
+    pub async fn new(auth: Arc<dyn Auth>, tls_context: TlsContext, config: Trojan) -> Result<Self> {
         let fallback_acceptor = FallbackAcceptor::new(config.fallback)
             .await
             .context("Failed to setup fallback server.")?;
         Ok(TrojanInbound {
-            outbound,
             bind: config.bind,
             auth,
             tls_context,

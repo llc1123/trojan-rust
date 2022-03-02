@@ -1,7 +1,7 @@
 use anyhow::Result;
 use bytes::{Buf, BufMut, BytesMut};
 use futures::{ready, SinkExt, StreamExt};
-use socks5_protocol::{sync::FromIO, Address};
+use socks5_protocol::sync::FromIO;
 use std::{
     io::{self, Write},
     net::SocketAddr,
@@ -10,7 +10,10 @@ use std::{
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tokio_util::codec::{Decoder, Encoder, Framed};
 
-use crate::common::AsyncUdp;
+use crate::{
+    common::{Address, AsyncUdp},
+    inbound::InboundUdp,
+};
 
 const UDP_MAX_SIZE: usize = 65535;
 // 259 is max size of address, atype 1 + domain len 1 + domain 255 + port 2
@@ -24,7 +27,7 @@ impl UdpCodec {
     }
 }
 
-type UdpPacket = (Vec<u8>, Address);
+type UdpPacket = (Vec<u8>, socks5_protocol::Address);
 
 impl Encoder<UdpPacket> for UdpCodec {
     type Error = io::Error;
@@ -84,7 +87,8 @@ impl Decoder for UdpCodec {
         }
 
         let mut reader = src.reader();
-        let address = Address::read_from(&mut reader).map_err(|e| e.to_io_err())?;
+        let address =
+            socks5_protocol::Address::read_from(&mut reader).map_err(|e| e.to_io_err())?;
         let src = reader.into_inner();
 
         // Length and CrLf
@@ -113,6 +117,28 @@ where
             framed: Framed::new(stream, UdpCodec::new(None)),
             flushing: false,
         }
+    }
+}
+
+impl<S> InboundUdp for TrojanUdp<S>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    fn poll_recv_send_to(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<crate::common::Address>> {
+        todo!()
+    }
+
+    fn poll_send_recv_from(
+        &mut self,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        addr: SocketAddr,
+    ) -> Poll<io::Result<usize>> {
+        todo!()
     }
 }
 
@@ -146,7 +172,7 @@ where
         &mut self,
         cx: &mut Context<'_>,
         buf: &[u8],
-        addr: SocketAddr,
+        addr: &Address,
     ) -> Poll<io::Result<usize>> {
         loop {
             if self.flushing {
@@ -155,7 +181,8 @@ where
                 return Poll::Ready(Ok(buf.len()));
             }
             ready!(self.framed.poll_ready_unpin(cx))?;
-            self.framed.start_send_unpin((buf.to_vec(), addr.into()))?;
+            self.framed
+                .start_send_unpin((buf.to_vec(), addr.clone().into()))?;
             self.flushing = true;
         }
     }

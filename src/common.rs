@@ -68,8 +68,10 @@ impl<T: AsyncRead + AsyncWrite + Unpin> AsyncTcp for T {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct AddressDomain(pub String, pub u16);
 
+#[derive(Debug, Clone)]
 pub enum Address {
     Domain(AddressDomain),
     SocketAddr(SocketAddr),
@@ -90,6 +92,21 @@ impl From<socks5_protocol::Address> for Address {
             socks5_protocol::Address::SocketAddr(s) => Address::SocketAddr(s),
             socks5_protocol::Address::Domain(d, p) => Address::Domain(AddressDomain(d, p)),
         }
+    }
+}
+
+impl From<Address> for socks5_protocol::Address {
+    fn from(addr: Address) -> Self {
+        match addr {
+            Address::SocketAddr(s) => socks5_protocol::Address::SocketAddr(s),
+            Address::Domain(AddressDomain(d, p)) => socks5_protocol::Address::Domain(d, p),
+        }
+    }
+}
+
+impl From<SocketAddr> for Address {
+    fn from(addr: SocketAddr) -> Self {
+        Address::SocketAddr(addr)
     }
 }
 
@@ -114,7 +131,7 @@ pub trait AsyncUdp {
         &mut self,
         cx: &mut Context<'_>,
         buf: &[u8],
-        addr: SocketAddr,
+        addr: &Address,
     ) -> Poll<io::Result<usize>>;
 }
 
@@ -127,7 +144,7 @@ impl UdpStream {
     pub async fn recv_from(&mut self, buf: &mut ReadBuf<'_>) -> io::Result<SocketAddr> {
         poll_fn(|cx| self.0.poll_recv_from(cx, buf)).await
     }
-    pub async fn send_to(&mut self, buf: &[u8], addr: SocketAddr) -> io::Result<usize> {
+    pub async fn send_to(&mut self, buf: &[u8], addr: &Address) -> io::Result<usize> {
         poll_fn(|cx| self.0.poll_send_to(cx, buf, addr)).await
     }
     pub fn as_ref(&self) -> &dyn AsyncUdp {
