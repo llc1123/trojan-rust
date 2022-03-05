@@ -129,7 +129,17 @@ where
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<crate::common::Address>> {
-        todo!()
+        let (bytes, from) = match ready!(self.framed.poll_next_unpin(cx)) {
+            Some(r) => r?,
+            None => return Poll::Ready(Err(io::ErrorKind::UnexpectedEof.into())),
+        };
+
+        let to_copy = bytes.len().min(buf.remaining());
+        buf.initialize_unfilled_to(to_copy)
+            .copy_from_slice(&bytes[..to_copy]);
+        buf.advance(to_copy);
+
+        Poll::Ready(Ok(from.into()))
     }
 
     fn poll_send_recv_from(
@@ -138,7 +148,16 @@ where
         buf: &[u8],
         addr: SocketAddr,
     ) -> Poll<io::Result<usize>> {
-        todo!()
+        loop {
+            if self.flushing {
+                ready!(self.framed.poll_flush_unpin(cx))?;
+                self.flushing = false;
+                return Poll::Ready(Ok(buf.len()));
+            }
+            ready!(self.framed.poll_ready_unpin(cx))?;
+            self.framed.start_send_unpin((buf.to_vec(), addr.into()))?;
+            self.flushing = true;
+        }
     }
 }
 

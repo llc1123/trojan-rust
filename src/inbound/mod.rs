@@ -36,10 +36,7 @@ pub enum InboundRequest<T, U> {
 }
 
 #[async_trait]
-pub trait Inbound<T>: Send + Sync
-where
-    T: Outbound,
-{
+pub trait Inbound: Send + Sync {
     type TcpStream: AsyncTcp + Send + Sync + Unpin + 'static;
     type UdpSocket: InboundUdp + Send + Sync + Unpin + 'static;
 

@@ -1,11 +1,10 @@
 use std::{
     io::{self, Read},
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4},
-    sync::Arc,
     task::{Context, Poll},
 };
 
-use anyhow::Result;
+use anyhow::{bail, Result};
 use async_trait::async_trait;
 use futures::ready;
 use socks5_protocol::{
@@ -18,29 +17,22 @@ use tokio::{
     sync::mpsc::Sender,
 };
 
-use crate::{common::AsyncUdp, config, outbound::Outbound};
+use crate::config;
 
 use super::{Inbound, InboundRequest, InboundUdp};
 
-pub struct Socks5Inbound<O> {
-    outbound: Arc<O>,
+pub struct Socks5Inbound {
     bind: String,
 }
 
-impl<O> Socks5Inbound<O> {
-    pub fn new(outbound: O, config: config::Socks5Inbound) -> Self {
-        Socks5Inbound {
-            outbound: Arc::new(outbound),
-            bind: config.bind,
-        }
+impl Socks5Inbound {
+    pub fn new(config: config::Socks5Inbound) -> Self {
+        Socks5Inbound { bind: config.bind }
     }
 }
 
 #[async_trait]
-impl<O> Inbound<O> for Socks5Inbound<O>
-where
-    O: Outbound,
-{
+impl Inbound for Socks5Inbound {
     type TcpStream = TcpStream;
     type UdpSocket = Socks5UdpSocket;
 
@@ -48,23 +40,19 @@ where
         &mut self,
         sender: Sender<InboundRequest<Self::TcpStream, Self::UdpSocket>>,
     ) -> Result<()> {
-        let listener = TcpListener::bind(self.bind).await?;
+        let listener = TcpListener::bind(&self.bind).await?;
         loop {
             let (stream, addr) = listener.accept().await?;
-            tokio::spawn(accept(stream, addr, sender.clone(), self.outbound.clone()));
+            tokio::spawn(accept(stream, addr, sender.clone()));
         }
     }
 }
 
-async fn accept<O>(
+async fn accept(
     stream: TcpStream,
     addr: SocketAddr,
     sender: Sender<InboundRequest<TcpStream, Socks5UdpSocket>>,
-    outbound: Arc<O>,
-) -> Result<()>
-where
-    O: Outbound,
-{
+) -> Result<InboundRequest<TcpStream, Socks5UdpSocket>> {
     let default_addr: SocketAddr = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0));
     let mut stream = BufWriter::with_capacity(512, stream);
 
@@ -98,8 +86,8 @@ where
             stream.flush().await?;
 
             InboundRequest::TcpConnect {
-                addr: cmd_req.address.to_string(),
-                stream,
+                addr: cmd_req.address.into(),
+                stream: stream.into_inner(),
             }
         }
         Command::UdpAssociate => {
@@ -110,7 +98,7 @@ where
                 Address::SocketAddr(SocketAddr::V6(_)) => {
                     SocketAddr::new(Ipv6Addr::UNSPECIFIED.into(), 0)
                 }
-                _ => return Ok(None),
+                _ => bail!("unsupported address"),
             };
             let udp = UdpSocket::bind(bind_addr).await?;
             let mut local_addr = addr;
@@ -122,21 +110,19 @@ where
                 .map_err(Error::to_io_err)?;
             stream.flush().await?;
             InboundRequest::UdpBind {
-                addr: "0.0.0.0:0".to_string(),
+                addr: bind_addr.into(),
                 stream: Socks5UdpSocket {
                     udp,
-                    _tcp: stream,
+                    _tcp: stream.into_inner(),
                     endpoint: None,
                     buf: vec![0u8; 2048],
-                    send_buf: None,
+                    send_buf: Vec::new(),
                 },
             }
         }
-        _ => {
-            return Ok(None);
-        }
+        _ => bail!("unsupported command"),
     };
-    Ok(Some(accept))
+    Ok(accept)
 }
 
 pub fn parse_udp(buf: &[u8]) -> io::Result<(Address, &[u8])> {
@@ -187,11 +173,8 @@ impl InboundUdp for Socks5UdpSocket {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<crate::common::Address>> {
-        let Socks5UdpSocket {
-            udp, endpoint, buf, ..
-        } = &mut *self;
-        let mut buf = ReadBuf::new(&mut buf[..]);
-        let from_addr = ready!(udp.poll_recv_from(cx, &mut buf))?;
+        let Socks5UdpSocket { udp, endpoint, .. } = &mut *self;
+        let from_addr = ready!(udp.poll_recv_from(cx, buf))?;
         if endpoint.is_none() {
             *endpoint = Some(from_addr);
         };
