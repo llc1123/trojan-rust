@@ -9,17 +9,16 @@ mod server;
 mod utils;
 
 use anyhow::{Context, Result};
-use clap::{AppSettings, Clap};
+use clap::Parser;
 use log::error;
 use utils::{config, logger};
 
-#[derive(Clap)]
-#[clap(version, author, about)]
-#[clap(setting = AppSettings::ColoredHelp)]
+#[derive(Parser, Debug)]
+#[command(version, author, about)]
 struct Opts {
-    #[clap(short, long, default_value = "config.toml")]
+    #[arg(short, long, default_value = "config.toml")]
     config: String,
-    #[clap(long, default_value = "info", env = "LOGLEVEL")]
+    #[arg(long, default_value = "info", env = "LOGLEVEL")]
     log_level: String,
 }
 
