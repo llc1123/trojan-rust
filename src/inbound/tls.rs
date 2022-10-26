@@ -49,7 +49,7 @@ impl TlsContext {
 
         tokio::spawn(keylogger(rx).inspect_err(|e| log::error!("keylogger error: {:?}", e)));
 
-        let mut acceptor = ssl::SslAcceptor::mozilla_intermediate_v5(ssl::SslMethod::tls_server())?;
+        let mut acceptor = ssl::SslAcceptor::mozilla_modern_v5(ssl::SslMethod::tls_server())?;
         acceptor.set_verify(ssl::SslVerifyMode::NONE);
         acceptor.set_certificate_chain_file(&config.cert)?;
         acceptor.set_private_key_file(&config.key, ssl::SslFiletype::PEM)?;
