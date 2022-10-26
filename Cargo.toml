@@ -1,5 +1,3 @@
-cargo-features = ["strip"]
-
 [package]
 name = "trojan-rust"
 version = "1.4.0"
@@ -32,13 +30,13 @@ hyper = { version = "0.14.7", features = ["http1", "server"] }
 http = "0.2"
 futures = "0.3.14"
 socks5-protocol = "0.3.4"
-tokio-util = { version = "0.6.6", features = ["codec", "net"] }
+tokio-util = { version = "0.7.3", features = ["codec", "net"] }
 bytes = "1.0.1"
 async-trait = "0.1.50"
-sha2 = "0.9.5"
+sha2 = "0.10.5"
 hex = "0.4.3"
-redis = { version = "0.20.0", features = ["tokio-comp", "connection-manager"] }
+redis = { version = "0.22.1", features = ["tokio-comp", "connection-manager"] }
 tokio-openssl = "0.6.1"
 openssl = { version = "0.10.34", features = ["vendored"] }
 tokio-io-timeout = "1.1.1"
-serde_with = "1.9.2"
+serde_with = "2.0.0"
