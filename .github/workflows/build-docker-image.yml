@@ -5,6 +5,8 @@ on: [push]
 jobs:
   docker:
     runs-on: ubuntu-latest
+    env:
+      CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
       -
         name: Checkout
