@@ -13,27 +13,27 @@ panic = 'abort'
 strip = "symbols"
 
 [dependencies]
-anyhow = "1.0.40"
-chrono = "0.4.19"
+anyhow = "1.0.66"
+chrono = "0.4.22"
 clap = { version = "4.0.18", features = ["derive", "env"] }
-fern = { version = "0.6.0", features = ["colored"] }
-log = "0.4.14"
-serde = "1.0.125"
-serde_derive = "1.0.125"
-tokio = { version = "1.5.0", features = ["full"] }
-tokio-stream = { version = "0.1.6", features = ["sync"] }
-toml = "0.5.8"
-hyper = { version = "0.14.7", features = ["http1", "server"] }
-http = "0.2"
-futures = "0.3.14"
-socks5-protocol = "0.3.4"
-tokio-util = { version = "0.7.3", features = ["codec", "net"] }
-bytes = "1.0.1"
-async-trait = "0.1.50"
-sha2 = "0.10.5"
+fern = { version = "0.6.1", features = ["colored"] }
+log = "0.4.17"
+serde = "1.0.147"
+serde_derive = "1.0.147"
+tokio = { version = "1.21.2", features = ["full"] }
+tokio-stream = { version = "0.1.11", features = ["sync"] }
+toml = "0.5.9"
+hyper = { version = "0.14.20", features = ["http1", "server"] }
+http = "0.2.8"
+futures = "0.3.25"
+socks5-protocol = "0.3.5"
+tokio-util = { version = "0.7.4", features = ["codec", "net"] }
+bytes = "1.2.1"
+async-trait = "0.1.58"
+sha2 = "0.10.6"
 hex = "0.4.3"
 redis = { version = "0.22.1", features = ["tokio-comp", "connection-manager"] }
-tokio-openssl = "0.6.1"
-openssl = { version = "0.10.34", features = ["vendored"] }
-tokio-io-timeout = "1.1.1"
-serde_with = "2.0.0"
+tokio-openssl = "0.6.3"
+openssl = { version = "0.10.42", features = ["vendored"] }
+tokio-io-timeout = "1.2.0"
+serde_with = "2.0.1"
